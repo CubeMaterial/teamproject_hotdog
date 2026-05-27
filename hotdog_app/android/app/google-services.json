@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "448887356891",
+    "project_id": "hotdogfinal",
+    "storage_bucket": "hotdogfinal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:448887356891:android:ffa805e465b331adc57bfe",
+        "android_client_info": {
+          "package_name": "com.example.hotdog_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKeNCbyEQfg7cQYb2F0e7XFKMUq_uaBE4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
