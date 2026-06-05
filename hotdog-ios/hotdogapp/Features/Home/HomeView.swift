@@ -1,7 +1,6 @@
 import CoreLocation
 import SwiftUI
 import UIKit
-import WebKit
 
 struct HomeView: View {
     @EnvironmentObject private var appState: AppState
@@ -867,11 +866,6 @@ struct HomeView: View {
 
 private struct DogDetailSheet: View {
     let dog: DogProfile
-    @State private var generatedGIFURL: URL?
-    @State private var isGeneratingGIF = false
-    @State private var gifErrorMessage: String?
-
-    private let apiClient = HotdogAPIClient()
 
     var body: some View {
         let palette = dog.theme.palette
@@ -879,7 +873,6 @@ private struct DogDetailSheet: View {
         ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     dogPhoto(palette: palette)
-                    gifStatusView(palette: palette)
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text(dog.name)
@@ -899,19 +892,11 @@ private struct DogDetailSheet: View {
             .background(palette.background.ignoresSafeArea())
             .navigationTitle("강아지 정보")
             .navigationBarTitleDisplayMode(.inline)
-            .task(id: dog.imageURL) {
-                await generateDogGIFIfPossible()
-            }
     }
 
     @ViewBuilder
     private func dogPhoto(palette: AppPalette) -> some View {
-        if let generatedGIFURL {
-            AnimatedGIFView(url: generatedGIFURL)
-                .frame(maxWidth: .infinity)
-                .frame(height: 230)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        } else if let dataImage = dogDataURIImage() {
+        if let dataImage = dogDataURIImage() {
             Image(uiImage: dataImage)
                 .resizable()
                 .scaledToFill()
@@ -942,29 +927,6 @@ private struct DogDetailSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         } else {
             fallbackDogPhoto(palette: palette)
-        }
-    }
-
-    @ViewBuilder
-    private func gifStatusView(palette: AppPalette) -> some View {
-        if isGeneratingGIF {
-            HStack(spacing: 10) {
-                ProgressView()
-                    .tint(palette.primary)
-                Text("3D 회전 이미지를 생성하는 중입니다.")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(palette.textSecondary)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(palette.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        } else if let gifErrorMessage {
-            Text(gifErrorMessage)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(palette.textSecondary)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(palette.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
@@ -1001,52 +963,6 @@ private struct DogDetailSheet: View {
         }
     }
 
-    private func generateDogGIFIfPossible() async {
-        guard generatedGIFURL == nil, !isGeneratingGIF else { return }
-        guard let imageData = await dogImageData() else {
-            await MainActor.run {
-                gifErrorMessage = "3D 이미지 생성을 위한 강아지 사진이 없습니다."
-            }
-            return
-        }
-
-        await MainActor.run {
-            isGeneratingGIF = true
-            gifErrorMessage = nil
-        }
-
-        do {
-            let response = try await apiClient.generateDogGIF(imageData: imageData)
-            await MainActor.run {
-                if let gifURL = response.gifURL, let url = URL(string: gifURL) {
-                    generatedGIFURL = url
-                } else {
-                    gifErrorMessage = "3D 회전 이미지 URL을 받지 못했습니다."
-                }
-                isGeneratingGIF = false
-            }
-        } catch {
-            await MainActor.run {
-                gifErrorMessage = "3D 회전 이미지를 생성하지 못했습니다. \(error.localizedDescription)"
-                isGeneratingGIF = false
-            }
-        }
-    }
-
-    private func dogImageData() async -> Data? {
-        guard let imageURL = dog.imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !imageURL.isEmpty else {
-            return nil
-        }
-
-        if let data = dataFromDataURI(imageURL) {
-            return data
-        }
-
-        guard let url = URL(string: imageURL) else { return nil }
-        return try? await URLSession.shared.data(from: url).0
-    }
-
     private func dogDataURIImage() -> UIImage? {
         guard let imageURL = dog.imageURL,
               let data = dataFromDataURI(imageURL) else {
@@ -1067,57 +983,3 @@ private struct DogDetailSheet: View {
         return Data(base64Encoded: String(payload))
     }
 }
-private struct AnimatedGIFView: UIViewRepresentable {
-    let url: URL
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeUIView(context: Context) -> WKWebView {
-        let webView = WKWebView()
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.backgroundColor = .clear
-        return webView
-    }
-
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        guard context.coordinator.loadedURL != url else { return }
-
-        var request = URLRequest(url: url)
-        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
-        request.setValue(DogAnalysisAPIConfiguration.apiKey, forHTTPHeaderField: "x-api-key")
-        webView.load(request)
-        context.coordinator.loadedURL = url
-        context.coordinator.startLooping(webView: webView, request: request)
-    }
-
-    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
-        coordinator.stopLooping()
-        webView.stopLoading()
-    }
-    final class Coordinator {
-        var loadedURL: URL?
-        private var reloadTask: Task<Void, Never>?
-
-        func startLooping(webView: WKWebView, request: URLRequest) {
-            reloadTask?.cancel()
-            reloadTask = Task { @MainActor [weak webView] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 4_000_000_000)
-                    guard !Task.isCancelled, let webView else { return }
-                    webView.load(request)
-                }
-            }
-        }
-
-        func stopLooping() {
-            reloadTask?.cancel()
-            reloadTask = nil
-        }
-    }
-}
-

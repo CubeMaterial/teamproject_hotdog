@@ -1,4 +1,3 @@
-import CoreImage
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -23,7 +22,7 @@ struct DogOnboardingView: View {
     private let keyOrange = Color(red: 0.95, green: 0.55, blue: 0.26)
     private let deepOrange = Color(red: 0.88, green: 0.42, blue: 0.18)
     private let inkBrown = Color(red: 0.25, green: 0.13, blue: 0.07)
-    private let analyzerClient = DogImageAnalyzerClient()
+    private let apiClient = HotdogAPIClient()
     private var activePalette: AppPalette {
         selectedTheme.palette
     }
@@ -492,105 +491,28 @@ struct DogOnboardingView: View {
         guard let imageData = image.jpegData(compressionQuality: 0.86) else {
             await MainActor.run {
                 detectedBreed = "기타"
-                selectedTheme = detectTheme(from: image) ?? .brown
                 isAnalyzingImage = false
                 localErrorMessage = "사진을 분석 가능한 형식으로 변환하지 못했습니다."
             }
             return
         }
 
-        async let breedResult = analyzerClient.predictBreed(imageData: imageData)
-        async let colorResult = analyzerClient.extractColor(imageData: imageData)
+        do {
+            let analysis = try await apiClient.analyzeDogImage(imageData: imageData)
+            let breed = analysis.resolvedBreed
 
-        let breed = (try? await breedResult).map(koreanBreedName(for:)) ?? "기타"
-        let theme = (try? await colorResult).flatMap(theme(for:)) ?? detectTheme(from: image) ?? .brown
-
-        await MainActor.run {
-            detectedBreed = supportedBreeds.contains(breed) ? breed : "기타"
-            selectedTheme = theme
-            isAnalyzingImage = false
+            await MainActor.run {
+                detectedBreed = supportedBreeds.contains(breed) ? breed : "기타"
+                selectedTheme = analysis.resolvedTheme
+                isAnalyzingImage = false
+            }
+        } catch {
+            await MainActor.run {
+                detectedBreed = "기타"
+                isAnalyzingImage = false
+                localErrorMessage = "강아지 분석 봇과 연결하지 못했습니다. API 서버 상태를 확인해주세요."
+            }
         }
-    }
-
-    private func detectTheme(from image: UIImage) -> DogColorTheme? {
-        guard let ciImage = CIImage(image: image) else { return nil }
-
-        let extent = ciImage.extent
-        let parameters: [String: Any] = [
-            kCIInputImageKey: ciImage,
-            kCIInputExtentKey: CIVector(cgRect: extent)
-        ]
-
-        guard let filter = CIFilter(name: "CIAreaAverage", parameters: parameters),
-              let outputImage = filter.outputImage else {
-            return nil
-        }
-
-        let context = CIContext(options: [.workingColorSpace: NSNull()])
-        var bitmap = [UInt8](repeating: 0, count: 4)
-
-        context.render(
-            outputImage,
-            toBitmap: &bitmap,
-            rowBytes: 4,
-            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-            format: .RGBA8,
-            colorSpace: nil
-        )
-
-        let r = Double(bitmap[0]) / 255.0
-        let g = Double(bitmap[1]) / 255.0
-        let b = Double(bitmap[2]) / 255.0
-        let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-        if luminance < 0.25 { return .black }
-        if luminance > 0.82 { return .white }
-        if abs(r - g) < 0.08 && abs(g - b) < 0.08 { return .gray }
-        return .brown
-    }
-
-    private func koreanBreedName(for prediction: String) -> String {
-        switch prediction.lowercased().replacingOccurrences(of: "-", with: "_").replacingOccurrences(of: " ", with: "_") {
-        case "maltese":
-            return "몰티즈"
-        case "poodle", "toy_poodle", "miniature_poodle", "standard_poodle":
-            return "푸들"
-        case "mixed", "mixed_breed", "mix":
-            return "믹스견"
-        case "pomeranian":
-            return "포메라니안"
-        case "bichon_frise", "bichon":
-            return "비숑 프리제"
-        case "chihuahua":
-            return "치와와"
-        case "shih_tzu", "shihtzu":
-            return "시츄"
-        case "jindo", "korean_jindo", "jindo_dog":
-            return "진돗개"
-        case "yorkshire_terrier", "yorkie":
-            return "요크셔테리어"
-        case "golden_retriever":
-            return "골든 리트리버"
-        default:
-            return "기타"
-        }
-    }
-
-    private func theme(for colorName: String) -> DogColorTheme? {
-        let value = colorName.lowercased()
-        if value.contains("블랙") || value.contains("검정") || value.contains("black") {
-            return .black
-        }
-        if value.contains("그레이") || value.contains("회색") || value.contains("gray") || value.contains("grey") {
-            return .gray
-        }
-        if value.contains("화이트") || value.contains("흰") || value.contains("white") {
-            return .white
-        }
-        if value.contains("브라운") || value.contains("갈색") || value.contains("brown") {
-            return .brown
-        }
-        return nil
     }
 
     private func submit() {
@@ -671,113 +593,7 @@ private struct CameraImagePicker: UIViewControllerRepresentable {
     }
 }
 
-private struct DogImageAnalyzerClient {
-    private struct BreedPredictionResponse: Decodable {
-        let prediction: String
-    }
-
-    private struct ColorExtractionResponse: Decodable {
-        let mainColor: String
-
-        enum CodingKeys: String, CodingKey {
-            case mainColor = "main_color"
-        }
-    }
-
-    private enum Endpoint {
-        static let baseURL = URL(string: "https://borrowing-brook-shakiness.ngrok-free.dev")!
-        static let breedPath = "/dogkind/predict"
-        static let colorPath = "/color/extract"
-        static let apiKey = "dog-api-test-key"
-    }
-
-    private let session: URLSession
-    private let decoder = JSONDecoder()
-
-    init(session: URLSession = .shared) {
-        self.session = session
-    }
-
-    func predictBreed(imageData: Data) async throws -> String {
-        let data = try await upload(imageData: imageData, path: Endpoint.breedPath, queryItems: [
-            URLQueryItem(name: "top_k", value: "3")
-        ])
-        return try decoder.decode(BreedPredictionResponse.self, from: data).prediction
-    }
-
-    func extractColor(imageData: Data) async throws -> String {
-        let data = try await upload(imageData: imageData, path: Endpoint.colorPath)
-        return try decoder.decode(ColorExtractionResponse.self, from: data).mainColor
-    }
-
-    private func upload(imageData: Data, path: String, queryItems: [URLQueryItem] = []) async throws -> Data {
-        let boundary = "Boundary-\(UUID().uuidString)"
-        let url = Endpoint.baseURL.appending(path: path).appending(queryItems: queryItems)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
-        request.setValue(Endpoint.apiKey, forHTTPHeaderField: "x-api-key")
-        request.httpBody = multipartBody(
-            imageData: imageData,
-            boundary: boundary,
-            fieldName: "image",
-            filename: "dog.jpg"
-        )
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        return data
-    }
-
-    private func multipartBody(imageData: Data, boundary: String, fieldName: String, filename: String) -> Data {
-        var body = Data()
-        body.appendString("--\(boundary)\r\n")
-        body.appendString("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(filename)\"\r\n")
-        body.appendString("Content-Type: image/jpeg\r\n\r\n")
-        body.append(imageData)
-        body.appendString("\r\n")
-        body.appendString("--\(boundary)--\r\n")
-        return body
-    }
-}
-
-private extension Data {
-    mutating func appendString(_ string: String) {
-        if let data = string.data(using: .utf8) {
-            append(data)
-        }
-    }
-}
-
 private extension UIImage {
-    var cgImageOrientation: CGImagePropertyOrientation {
-        switch imageOrientation {
-        case .up:
-            return .up
-        case .down:
-            return .down
-        case .left:
-            return .left
-        case .right:
-            return .right
-        case .upMirrored:
-            return .upMirrored
-        case .downMirrored:
-            return .downMirrored
-        case .leftMirrored:
-            return .leftMirrored
-        case .rightMirrored:
-            return .rightMirrored
-        @unknown default:
-            return .up
-        }
-    }
-
     func normalizedForAnalysis(maxDimension: CGFloat = 1400) -> UIImage {
         let longestSide = max(size.width, size.height)
         guard longestSide > maxDimension, size.width > 0, size.height > 0 else { return self }

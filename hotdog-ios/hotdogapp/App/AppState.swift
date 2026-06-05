@@ -1120,8 +1120,7 @@ final class AppState: ObservableObject {
             }
             return (true, response.result ?? "정상 문장")
         } catch {
-            showSnackbar("비속어 감지 기능이 꺼져 있어 검사를 건너뜁니다.")
-            return (true, "비속어 감지 기능이 꺼져 있습니다.")
+            return (false, "비속어 감지 봇과 연결하지 못했습니다. API 서버 상태를 확인해주세요.")
         }
     }
 

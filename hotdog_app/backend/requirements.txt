@@ -8,3 +8,11 @@ numpy
 pandas
 scikit-learn
 h5py
+torch
+transformers>=4.40
+safetensors
+python-multipart
+pillow
+rembg
+onnxruntime
+opencv-python-headless

@@ -12,8 +12,23 @@ enum APIConfiguration {
 }
 
 enum DogAnalysisAPIConfiguration {
-    static let baseURLString = "https://borrowing-brook-shakiness.ngrok-free.dev"
+    static let defaultBaseURLString = "https://borrowing-brook-shakiness.ngrok-free.dev"
     static let apiKey = "dog-api-test-key"
+
+    static var baseURLStrings: [String] {
+        let override = ProcessInfo.processInfo.environment["HOTDOG_DOG_ANALYSIS_API_BASE_URL"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidates = [
+            override?.isEmpty == false ? override : nil,
+            APIConfiguration.baseURLString,
+            defaultBaseURLString
+        ].compactMap { $0 }
+
+        return candidates.reduce(into: [String]()) { result, candidate in
+            guard !result.contains(candidate) else { return }
+            result.append(candidate)
+        }
+    }
 }
 
 enum ChatbotAPIConfiguration {
@@ -566,15 +581,114 @@ struct CursePredictionResponseDTO: Decodable {
     }
 }
 
-struct DogGIFGenerationResponseDTO: Decodable {
-    let success: Bool?
-    let jobID: String?
-    let gifURL: String?
+struct DogImageAnalysisResponseDTO: Decodable {
+    struct BreedResult: Decodable {
+        struct Prediction: Decodable {
+            let label: String?
+            let breed: String?
+            let confidence: Double?
+        }
 
-    enum CodingKeys: String, CodingKey {
-        case success
-        case jobID = "job_id"
-        case gifURL = "gif_url"
+        let breed: String?
+        let label: String?
+        let confidence: Double?
+        let isOther: Bool?
+        let topPredictions: [Prediction]?
+
+        enum CodingKeys: String, CodingKey {
+            case breed
+            case label
+            case confidence
+            case isOther = "is_other"
+            case topPredictions = "top_predictions"
+        }
+    }
+
+    struct ColorResult: Decodable {
+        let dominantColor: String?
+        let dominantColorKO: String?
+        let mainHex: String?
+
+        enum CodingKeys: String, CodingKey {
+            case dominantColor = "dominant_color"
+            case dominantColorKO = "dominant_color_ko"
+            case mainHex = "main_hex"
+        }
+    }
+
+    let breed: BreedResult
+    let color: ColorResult
+
+    var resolvedBreed: String {
+        let candidates = [
+            breed.breed,
+            breed.topPredictions?.first?.breed,
+            breed.label
+        ].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        for candidate in candidates where !candidate.isEmpty {
+            let mapped = Self.koreanBreedName(for: candidate)
+            if mapped != "기타" || candidate == "기타" {
+                return mapped
+            }
+        }
+        return "기타"
+    }
+
+    var resolvedTheme: DogColorTheme {
+        let candidates = [color.dominantColorKO, color.dominantColor]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        for candidate in candidates {
+            if let theme = Self.theme(for: candidate) {
+                return theme
+            }
+        }
+        return .brown
+    }
+
+    private static func koreanBreedName(for prediction: String) -> String {
+        switch prediction.lowercased().replacingOccurrences(of: "-", with: "_").replacingOccurrences(of: " ", with: "_") {
+        case "몰티즈", "말티즈", "maltese":
+            return "몰티즈"
+        case "푸들", "poodle", "toy_poodle", "miniature_poodle", "standard_poodle":
+            return "푸들"
+        case "믹스견", "mixed", "mixed_breed", "mix":
+            return "믹스견"
+        case "포메라니안", "pomeranian":
+            return "포메라니안"
+        case "비숑 프리제", "비숑프리제", "비숑", "bichon_frise", "bichon":
+            return "비숑 프리제"
+        case "치와와", "chihuahua":
+            return "치와와"
+        case "시츄", "시추", "shih_tzu", "shihtzu":
+            return "시츄"
+        case "진돗개", "진도개", "jindo", "korean_jindo", "jindo_dog":
+            return "진돗개"
+        case "요크셔테리어", "요크셔 테리어", "yorkshire_terrier", "yorkie":
+            return "요크셔테리어"
+        case "골든 리트리버", "골든리트리버", "golden_retriever":
+            return "골든 리트리버"
+        default:
+            return "기타"
+        }
+    }
+
+    private static func theme(for colorName: String) -> DogColorTheme? {
+        let value = colorName.lowercased()
+        if value.contains("블랙") || value.contains("검정") || value.contains("black") {
+            return .black
+        }
+        if value.contains("그레이") || value.contains("회색") || value.contains("gray") || value.contains("grey") {
+            return .gray
+        }
+        if value.contains("화이트") || value.contains("흰") || value.contains("white") {
+            return .white
+        }
+        if value.contains("브라운") || value.contains("갈색") || value.contains("brown") {
+            return .brown
+        }
+        return nil
     }
 }
 
@@ -1093,14 +1207,14 @@ struct HotdogAPIClient {
         }
     }
 
-    func generateDogGIF(imageData: Data, mcResolution: Int = 256, chunkSize: Int = 8192) async throws -> DogGIFGenerationResponseDTO {
+    func analyzeDogImage(imageData: Data, topK: Int = 3, removeBackground: Bool = true) async throws -> DogImageAnalysisResponseDTO {
         let queryItems = [
-            URLQueryItem(name: "mc_resolution", value: "\(mcResolution)"),
-            URLQueryItem(name: "chunk_size", value: "\(chunkSize)")
+            URLQueryItem(name: "top_k", value: "\(topK)"),
+            URLQueryItem(name: "remove_background", value: removeBackground ? "true" : "false")
         ]
-        let data = try await uploadDogAnalysisImage(path: "/dog3d/gif", imageData: imageData, queryItems: queryItems)
+        let data = try await uploadDogAnalysisImage(path: "/analyze/image", imageData: imageData, queryItems: queryItems)
         do {
-            return try decoder.decode(DogGIFGenerationResponseDTO.self, from: data)
+            return try decoder.decode(DogImageAnalysisResponseDTO.self, from: data)
         } catch {
             throw HotdogAPIError.decoding(error)
         }
@@ -1362,83 +1476,105 @@ struct HotdogAPIClient {
     }
 
     private func sendDogAnalysisAPI<Body: Encodable>(path: String, method: String, body: Body?) async throws -> Data {
-        guard let baseURL = URL(string: DogAnalysisAPIConfiguration.baseURLString) else {
-            throw HotdogAPIError.invalidBaseURL(DogAnalysisAPIConfiguration.baseURLString)
+        var lastError: Error?
+
+        for baseURLString in DogAnalysisAPIConfiguration.baseURLStrings {
+            guard let baseURL = URL(string: baseURLString) else {
+                lastError = HotdogAPIError.invalidBaseURL(baseURLString)
+                continue
+            }
+
+            let url = baseURL.appending(path: path)
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
+            request.setValue(DogAnalysisAPIConfiguration.apiKey, forHTTPHeaderField: "x-api-key")
+
+            if let body {
+                request.httpBody = try encoder.encode(body)
+            }
+
+            let data: Data
+            let response: URLResponse
+            do {
+                (data, response) = try await session.data(for: request)
+            } catch let urlError as URLError {
+                lastError = HotdogAPIError.transport(urlError)
+                continue
+            } catch {
+                lastError = HotdogAPIError.unknown(error)
+                continue
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                lastError = HotdogAPIError.invalidResponse
+                continue
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                let bodyText = String(data: data, encoding: .utf8) ?? "응답 본문 없음"
+                lastError = HotdogAPIError.httpError(statusCode: httpResponse.statusCode, body: bodyText)
+                continue
+            }
+
+            return data
         }
 
-        let url = baseURL.appending(path: path)
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
-        request.setValue(DogAnalysisAPIConfiguration.apiKey, forHTTPHeaderField: "x-api-key")
-
-        if let body {
-            request.httpBody = try encoder.encode(body)
-        }
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch let urlError as URLError {
-            throw HotdogAPIError.transport(urlError)
-        } catch {
-            throw HotdogAPIError.unknown(error)
-        }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw HotdogAPIError.invalidResponse
-        }
-
-        guard (200...299).contains(httpResponse.statusCode) else {
-            let bodyText = String(data: data, encoding: .utf8) ?? "응답 본문 없음"
-            throw HotdogAPIError.httpError(statusCode: httpResponse.statusCode, body: bodyText)
-        }
-
-        return data
+        throw lastError ?? HotdogAPIError.invalidBaseURL(DogAnalysisAPIConfiguration.defaultBaseURLString)
     }
 
     private func uploadDogAnalysisImage(path: String, imageData: Data, queryItems: [URLQueryItem]) async throws -> Data {
-        guard let baseURL = URL(string: DogAnalysisAPIConfiguration.baseURLString) else {
-            throw HotdogAPIError.invalidBaseURL(DogAnalysisAPIConfiguration.baseURLString)
+        var lastError: Error?
+
+        for baseURLString in DogAnalysisAPIConfiguration.baseURLStrings {
+            guard let baseURL = URL(string: baseURLString) else {
+                lastError = HotdogAPIError.invalidBaseURL(baseURLString)
+                continue
+            }
+
+            let boundary = "Boundary-\(UUID().uuidString)"
+            let url = baseURL.appending(path: path).appending(queryItems: queryItems)
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 120
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
+            request.setValue(DogAnalysisAPIConfiguration.apiKey, forHTTPHeaderField: "x-api-key")
+            request.httpBody = multipartImageBody(
+                imageData: imageData,
+                boundary: boundary,
+                fieldName: "image",
+                filename: "dog.jpg"
+            )
+
+            let data: Data
+            let response: URLResponse
+            do {
+                (data, response) = try await session.data(for: request)
+            } catch let urlError as URLError {
+                lastError = HotdogAPIError.transport(urlError)
+                continue
+            } catch {
+                lastError = HotdogAPIError.unknown(error)
+                continue
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                lastError = HotdogAPIError.invalidResponse
+                continue
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                let bodyText = String(data: data, encoding: .utf8) ?? "응답 본문 없음"
+                lastError = HotdogAPIError.httpError(statusCode: httpResponse.statusCode, body: bodyText)
+                continue
+            }
+
+            return data
         }
 
-        let boundary = "Boundary-\(UUID().uuidString)"
-        let url = baseURL.appending(path: path).appending(queryItems: queryItems)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 120
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.setValue("true", forHTTPHeaderField: "ngrok-skip-browser-warning")
-        request.setValue(DogAnalysisAPIConfiguration.apiKey, forHTTPHeaderField: "x-api-key")
-        request.httpBody = multipartImageBody(
-            imageData: imageData,
-            boundary: boundary,
-            fieldName: "image",
-            filename: "dog.jpg"
-        )
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch let urlError as URLError {
-            throw HotdogAPIError.transport(urlError)
-        } catch {
-            throw HotdogAPIError.unknown(error)
-        }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw HotdogAPIError.invalidResponse
-        }
-
-        guard (200...299).contains(httpResponse.statusCode) else {
-            let bodyText = String(data: data, encoding: .utf8) ?? "응답 본문 없음"
-            throw HotdogAPIError.httpError(statusCode: httpResponse.statusCode, body: bodyText)
-        }
-
-        return data
+        throw lastError ?? HotdogAPIError.invalidBaseURL(DogAnalysisAPIConfiguration.defaultBaseURLString)
     }
 
     private func multipartImageBody(imageData: Data, boundary: String, fieldName: String, filename: String) -> Data {

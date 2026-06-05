@@ -3,3 +3,11 @@ uvicorn[standard]==0.34.0
 aiomysql==0.2.0
 pymysql==1.1.1
 python-dotenv==1.0.1
+torch
+transformers>=4.40
+safetensors
+python-multipart
+pillow
+rembg
+onnxruntime
+opencv-python-headless

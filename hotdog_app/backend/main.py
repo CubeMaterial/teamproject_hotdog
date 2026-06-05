@@ -11,6 +11,7 @@ if __package__ in {None, ""}:
 
 from config import settings
 from app.chatbot.router import router as chatbot_router
+from app.dog_analysis.router import router as dog_analysis_router
 from user_common import UPLOADS_DIR, shutdown_user_api, startup_user_api
 from routers.auth import router as admin_auth_router
 from routers.board_posts import router as admin_board_posts_router
@@ -77,6 +78,7 @@ app.include_router(user_accounts_router)
 app.include_router(user_purchases_router)
 app.include_router(user_staff_router)
 app.include_router(chatbot_router)
+app.include_router(dog_analysis_router)
 
 app.add_middleware(
     CORSMiddleware,

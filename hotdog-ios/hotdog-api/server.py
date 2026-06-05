@@ -1,4 +1,5 @@
 import base64
+import importlib.util
 import os
 import random
 import re
@@ -31,6 +32,32 @@ app.add_middleware(
 )
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 app.include_router(chatbot_router)
+
+
+def load_dog_analysis_router():
+    router_path = (
+        BASE_DIR.parents[1]
+        / "hotdog_app"
+        / "backend"
+        / "app"
+        / "dog_analysis"
+        / "router.py"
+    )
+    if not router_path.exists():
+        return None
+
+    spec = importlib.util.spec_from_file_location("hotdog_shared_dog_analysis_router", router_path)
+    if spec is None or spec.loader is None:
+        return None
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, "router", None)
+
+
+dog_analysis_router = load_dog_analysis_router()
+if dog_analysis_router is not None:
+    app.include_router(dog_analysis_router)
 
 pool: Optional[aiomysql.Pool] = None
 email_verification_codes: Dict[str, Dict[str, Any]] = {}
