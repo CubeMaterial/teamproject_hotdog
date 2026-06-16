@@ -17,12 +17,17 @@ enum APIConfiguration {
 }
 
 enum DogAnalysisAPIConfiguration {
-    static let defaultBaseURLString = "http://127.0.0.1:8000"
+    static let defaultBaseURLString = "https://borrowing-brook-shakiness.ngrok-free.dev"
+    static let defaultAPIKey = "hotdog-api-test-key"
 
     static var apiKey: String? {
         ProcessInfo.processInfo.environment["HOTDOG_DOG_ANALYSIS_API_KEY"]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
+        ?? ProcessInfo.processInfo.environment["API_KEY"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        ?? defaultAPIKey
     }
 
     static var baseURLStrings: [String] {
@@ -30,8 +35,8 @@ enum DogAnalysisAPIConfiguration {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let candidates = [
             override?.isEmpty == false ? override : nil,
-            APIConfiguration.baseURLString,
-            defaultBaseURLString
+            defaultBaseURLString,
+            APIConfiguration.baseURLString
         ].compactMap { $0 }
 
         return candidates.removingDuplicates()
