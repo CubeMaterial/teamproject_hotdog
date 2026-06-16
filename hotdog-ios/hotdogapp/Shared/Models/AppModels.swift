@@ -1,7 +1,7 @@
 import Foundation
 
 struct Product: Identifiable, Hashable {
-    let id: UUID
+    let id: String
     let dbSeq: Int?
     let name: String
     let category: String
@@ -15,7 +15,7 @@ struct Product: Identifiable, Hashable {
     let thumbnailBase64: String?
 
     init(
-        id: UUID = UUID(),
+        id: String? = nil,
         dbSeq: Int? = nil,
         name: String,
         category: String,
@@ -28,7 +28,7 @@ struct Product: Identifiable, Hashable {
         imageBase64: String? = nil,
         thumbnailBase64: String? = nil
     ) {
-        self.id = id
+        self.id = id ?? Product.stableID(dbSeq: dbSeq, name: name, category: category, price: price)
         self.dbSeq = dbSeq
         self.name = name
         self.category = category
@@ -44,6 +44,17 @@ struct Product: Identifiable, Hashable {
 
     var isSoldOut: Bool {
         stockQuantity <= 0
+    }
+
+    private static func stableID(dbSeq: Int?, name: String, category: String, price: Int) -> String {
+        if let dbSeq {
+            return "db:\(dbSeq)"
+        }
+
+        let fallback = [name, category, "\(price)"]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .joined(separator: "|")
+        return "local:\(fallback)"
     }
 }
 

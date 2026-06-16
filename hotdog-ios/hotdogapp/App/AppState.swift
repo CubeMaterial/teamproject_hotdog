@@ -1,5 +1,4 @@
 import Combine
-import CryptoKit
 import LocalAuthentication
 import SwiftUI
 
@@ -10,41 +9,6 @@ enum ReviewListMode {
 
 @MainActor
 final class AppState: ObservableObject {
-    private struct UserSession: Codable {
-        let userSeq: Int
-        let userName: String?
-        let userID: String
-        let userPhone: String?
-        let quickPinHash: String?
-    }
-
-    private enum SessionStorage {
-        static let key = "hotdog_user_session"
-        static let guestCartKey = "hotdog_cart_guest_product_seqs"
-        static let guestFavoritesKey = "hotdog_favorite_guest_product_seqs"
-        static let guestReadNotificationsKey = "hotdog_read_notifications_guest"
-
-        static func dogOnboardingKey(for userSeq: Int) -> String {
-            "hotdog_dog_onboarding_pending_\(userSeq)"
-        }
-
-        static func cartKey(for userSeq: Int) -> String {
-            "hotdog_cart_product_seqs_\(userSeq)"
-        }
-
-        static func favoritesKey(for userSeq: Int) -> String {
-            "hotdog_favorite_product_seqs_\(userSeq)"
-        }
-
-        static func readNotificationsKey(for userSeq: Int) -> String {
-            "hotdog_read_notifications_\(userSeq)"
-        }
-
-        static func selectedDogKey(for userSeq: Int) -> String {
-            "hotdog_selected_dog_seq_\(userSeq)"
-        }
-    }
-
     @Published var isLoggedIn = false
     @Published var isSessionLocked = false
     @Published var isAuthenticating = false
@@ -112,6 +76,13 @@ final class AppState: ObservableObject {
     }
 
     private let apiClient = HotdogAPIClient()
+    private let validationService = AppValidationService()
+    private let productCatalogService = ProductCatalogService()
+    private let productStorageService = ProductStorageService()
+    private let reviewStateService = ReviewStateService()
+    private let sessionStorageService = SessionStorageService()
+    private let authStateService = AuthStateService()
+    private let notificationReadStateService = NotificationReadStateService()
     private var snackbarDismissTask: Task<Void, Never>?
     private var chatbotSessionID: String?
 
@@ -161,16 +132,7 @@ final class AppState: ObservableObject {
     }
 
     var biometricLoginTitle: String {
-        let context = LAContext()
-        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
-        switch context.biometryType {
-        case .faceID:
-            return "Face ID로 로그인"
-        case .touchID:
-            return "지문으로 로그인"
-        default:
-            return "생체인증 로그인"
-        }
+        authStateService.biometricLoginTitle()
     }
 
     func beginDogOnboarding() {
@@ -221,7 +183,7 @@ final class AppState: ObservableObject {
     }
 
     var favoriteProducts: [Product] {
-        products.filter { favoriteProductIDs.contains($0.id) }
+        productCatalogService.favoriteProducts(products, favoriteProductIDs: favoriteProductIDs)
     }
 
     var cartCount: Int {
@@ -233,11 +195,7 @@ final class AppState: ObservableObject {
     }
 
     var cartItems: [CartItem] {
-        let grouped = Dictionary(grouping: cartProductIDs, by: { $0 })
-        return products.compactMap { product in
-            guard let ids = grouped[product.id] else { return nil }
-            return CartItem(id: product.id, product: product, quantity: ids.count)
-        }
+        productCatalogService.cartItems(products: products, cartProductIDs: cartProductIDs)
     }
 
     var cartTotalPrice: Int {
@@ -566,11 +524,7 @@ final class AppState: ObservableObject {
             guard let self else { return }
             do {
                 let updated = try await apiClient.likeReview(reviewSeq: reviewSeq)
-                let productsBySeq = products.reduce(into: [Int: Product]()) { result, product in
-                    if let dbSeq = product.dbSeq {
-                        result[dbSeq] = product
-                    }
-                }
+                let productsBySeq = productCatalogService.productsBySeq(products)
                 let updatedReview = updated.toModel(productsBySeq: productsBySeq)
                 if let updatedIndex = self.reviews.firstIndex(where: { self.sameReview($0, updatedReview) }) {
                     self.reviews[updatedIndex] = self.reviewPreservingIdentity(
@@ -589,22 +543,7 @@ final class AppState: ObservableObject {
     }
 
     private func reviewPreservingIdentity(current: HotdogReview, updated: HotdogReview) -> HotdogReview {
-        HotdogReview(
-            id: current.id,
-            dbSeq: updated.dbSeq,
-            title: updated.title,
-            author: updated.author,
-            breed: updated.breed,
-            productName: updated.productName,
-            summary: updated.summary,
-            body: updated.body,
-            rating: updated.rating,
-            dateText: updated.dateText,
-            likes: updated.likes,
-            productSeq: updated.productSeq,
-            userSeq: updated.userSeq,
-            reviewImageURL: updated.reviewImageURL
-        )
+        reviewStateService.preservingIdentity(current: current, updated: updated)
     }
 
     func loadRemoteData() async {
@@ -613,11 +552,7 @@ final class AppState: ObservableObject {
 
         do {
             let fetchedProducts = try await apiClient.fetchProducts()
-            let productsBySeq = fetchedProducts.reduce(into: [Int: Product]()) { result, product in
-                if let dbSeq = product.dbSeq {
-                    result[dbSeq] = product
-                }
-            }
+            let productsBySeq = productCatalogService.productsBySeq(fetchedProducts)
             let fetchedReviews = try await apiClient.fetchReviews(productsBySeq: productsBySeq)
 
             if !fetchedProducts.isEmpty {
@@ -697,11 +632,7 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let productsBySeq = products.reduce(into: [Int: Product]()) { result, product in
-                if let dbSeq = product.dbSeq {
-                    result[dbSeq] = product
-                }
-            }
+            let productsBySeq = productCatalogService.productsBySeq(products)
             let history = try await apiClient.fetchUserPurchases(userSeq: currentUserSeq, productsBySeq: productsBySeq)
             purchaseHistoryItems = history
             purchasedProductSeqs = Set(history.compactMap { item in
@@ -783,8 +714,8 @@ final class AppState: ObservableObject {
     @discardableResult
     func login(userID: String, password: String) async -> Bool {
         let trimmedID = userID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedID.isEmpty, !password.isEmpty else {
-            authErrorMessage = "아이디와 비밀번호를 입력해주세요."
+        if let message = validationService.validateLoginInput(userID: userID, password: password) {
+            authErrorMessage = message
             return false
         }
 
@@ -852,7 +783,7 @@ final class AppState: ObservableObject {
             return false
         }
 
-        let pinHash = quickPinHash(for: pin)
+        let pinHash = authStateService.quickPinHash(for: pin)
         let matchesDatabasePin = currentUserQuickPinHash == pinHash
         let matchesLocalPin = AuthCredentialStore.loadQuickPin() == pin
         guard matchesDatabasePin || matchesLocalPin else {
@@ -880,7 +811,7 @@ final class AppState: ObservableObject {
             return false
         }
 
-        let pinHash = quickPinHash(for: pin)
+        let pinHash = authStateService.quickPinHash(for: pin)
         do {
             try await apiClient.updateUserQuickPin(userSeq: currentUserSeq, quickPinHash: pinHash)
             saveQuickPinState(pin: pin, pinHash: pinHash)
@@ -913,7 +844,7 @@ final class AppState: ObservableObject {
                 return false
             }
 
-            let pinHash = quickPinHash(for: newPin)
+            let pinHash = authStateService.quickPinHash(for: newPin)
             try await apiClient.updateUserQuickPin(userSeq: currentUserSeq, quickPinHash: pinHash)
             currentUserName = user.userName ?? currentUserName
             currentUserPhone = user.userPhone ?? currentUserPhone
@@ -934,14 +865,13 @@ final class AppState: ObservableObject {
         }
 
         let context = LAContext()
-        var evaluateError: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &evaluateError) else {
+        guard authStateService.canEvaluateBiometrics(context: context) else {
             authErrorMessage = "생체인증을 사용할 수 없습니다."
             return false
         }
 
         do {
-            let success = try await evaluateBiometric(context: context)
+            let success = try await authStateService.evaluateBiometric(context: context)
             guard success else {
                 authErrorMessage = "생체인증 로그인에 실패했습니다."
                 return false
@@ -970,16 +900,12 @@ final class AppState: ObservableObject {
         let trimmedName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedPhone = userPhone.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard isValidEmail(trimmedID) else {
-            signUpErrorMessage = "아이디는 이메일 형식이어야 합니다."
-            return false
-        }
-        guard !trimmedID.isEmpty, !trimmedPassword.isEmpty, !trimmedName.isEmpty else {
-            signUpErrorMessage = "아이디, 비밀번호, 이름을 입력해주세요."
-            return false
-        }
-        guard isValidPassword(trimmedPassword) else {
-            signUpErrorMessage = "비밀번호는 8자 이상, 영문 포함이어야 합니다."
+        if let message = validationService.validateSignUpInput(
+            userID: trimmedID,
+            password: trimmedPassword,
+            userName: trimmedName
+        ) {
+            signUpErrorMessage = message
             return false
         }
 
@@ -1167,11 +1093,7 @@ final class AppState: ObservableObject {
 
         do {
             let created = try await apiClient.createReview(request)
-            let productsBySeq = products.reduce(into: [Int: Product]()) { result, product in
-                if let dbSeq = product.dbSeq {
-                    result[dbSeq] = product
-                }
-            }
+                let productsBySeq = productCatalogService.productsBySeq(products)
             let review = created.toModel(productsBySeq: productsBySeq)
             reviews.insert(review, at: 0)
             notifications.insert(
@@ -1221,11 +1143,7 @@ final class AppState: ObservableObject {
 
         do {
             let updated = try await apiClient.updateReview(reviewSeq: reviewSeq, request: request)
-            let productsBySeq = products.reduce(into: [Int: Product]()) { result, product in
-                if let dbSeq = product.dbSeq {
-                    result[dbSeq] = product
-                }
-            }
+            let productsBySeq = productCatalogService.productsBySeq(products)
             let updatedReview = updated.toModel(productsBySeq: productsBySeq)
             if let index = reviews.firstIndex(where: { sameReview($0, updatedReview) }) {
                 reviews[index] = updatedReview
@@ -1445,8 +1363,7 @@ final class AppState: ObservableObject {
     }
 
     private func applyPreferredSelectedDog(from fetchedDogs: [DogProfile], userSeq: Int, fallback: DogProfile? = nil) {
-        let preferredSeq = UserDefaults.standard.integer(forKey: SessionStorage.selectedDogKey(for: userSeq))
-        if preferredSeq > 0,
+        if let preferredSeq = sessionStorageService.selectedDogSeq(for: userSeq),
            let preferredDog = fetchedDogs.first(where: { $0.dbSeq == preferredSeq }) {
             selectedDog = preferredDog
             selectedTheme = preferredDog.theme
@@ -1473,7 +1390,7 @@ final class AppState: ObservableObject {
 
     private func saveSelectedDogPreference(_ dog: DogProfile) {
         guard let currentUserSeq, let dogSeq = dog.dbSeq else { return }
-        UserDefaults.standard.set(dogSeq, forKey: SessionStorage.selectedDogKey(for: currentUserSeq))
+        sessionStorageService.saveSelectedDogSeq(dogSeq, for: currentUserSeq)
     }
 
     private func sameDog(_ lhs: DogProfile, _ rhs: DogProfile) -> Bool {
@@ -1484,33 +1401,19 @@ final class AppState: ObservableObject {
     }
 
     private func sorted(reviews: [HotdogReview]) -> [HotdogReview] {
-        reviews.sorted {
-            if $0.likes != $1.likes {
-                return $0.likes > $1.likes
-            }
-            return ($0.dbSeq ?? 0) > ($1.dbSeq ?? 0)
-        }
+        reviewStateService.sorted(reviews)
     }
 
     private func sameReview(_ lhs: HotdogReview, _ rhs: HotdogReview) -> Bool {
-        if let lhsSeq = lhs.dbSeq, let rhsSeq = rhs.dbSeq {
-            return lhsSeq == rhsSeq
-        }
-        return lhs.id == rhs.id
+        reviewStateService.sameReview(lhs, rhs)
     }
 
     private func reviewLikeKey(for review: HotdogReview) -> String {
-        if let dbSeq = review.dbSeq {
-            return "db:\(dbSeq)"
-        }
-        return "local:\(review.id.uuidString)"
+        reviewStateService.likeKey(for: review)
     }
 
     private func isCurrentUserAuthor(of review: HotdogReview) -> Bool {
-        if let userSeq = review.userSeq, let currentUserSeq {
-            return userSeq == currentUserSeq
-        }
-        return false
+        reviewStateService.isAuthor(review: review, currentUserSeq: currentUserSeq)
     }
 
     func loadChatbotOptions() async {
@@ -1644,18 +1547,7 @@ final class AppState: ObservableObject {
     }
 
     private func filteredProducts(searchText: String, category: String) -> [Product] {
-        products.filter { product in
-            let matchesCategory = category == "전체" || product.category == category
-            let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let matchesSearch = keyword.isEmpty || product.name.localizedCaseInsensitiveContains(keyword) || product.description.localizedCaseInsensitiveContains(keyword)
-            return matchesCategory && matchesSearch
-        }
-        .sorted {
-            if $0.isSoldOut != $1.isSoldOut {
-                return !$0.isSoldOut && $1.isSoldOut
-            }
-            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
-        }
+        productCatalogService.filteredProducts(products, searchText: searchText, category: category)
     }
 
     private func chatbotReply(for question: String) -> String {
@@ -1681,8 +1573,7 @@ final class AppState: ObservableObject {
     }
 
     private func restoreSession() {
-        guard let data = UserDefaults.standard.data(forKey: SessionStorage.key) else { return }
-        guard let session = try? JSONDecoder().decode(UserSession.self, from: data) else { return }
+        guard let session = sessionStorageService.restoreSession() else { return }
         currentUserSeq = session.userSeq
         currentUserName = session.userName
         currentUserID = session.userID
@@ -1695,116 +1586,55 @@ final class AppState: ObservableObject {
 
     private func saveSession(userSeq: Int, userName: String?, userID: String, userPhone: String?, quickPinHash: String?) {
         let session = UserSession(userSeq: userSeq, userName: userName, userID: userID, userPhone: userPhone, quickPinHash: quickPinHash)
-        guard let data = try? JSONEncoder().encode(session) else { return }
-        UserDefaults.standard.set(data, forKey: SessionStorage.key)
+        sessionStorageService.saveSession(session)
     }
 
     private func removeSession() {
-        UserDefaults.standard.removeObject(forKey: SessionStorage.key)
+        sessionStorageService.removeSession()
     }
 
     private func setDogOnboardingPending(_ pending: Bool, for userSeq: Int) {
-        UserDefaults.standard.set(pending, forKey: SessionStorage.dogOnboardingKey(for: userSeq))
+        sessionStorageService.setDogOnboardingPending(pending, for: userSeq)
     }
 
     private func isDogOnboardingPending(for userSeq: Int) -> Bool {
-        UserDefaults.standard.bool(forKey: SessionStorage.dogOnboardingKey(for: userSeq))
+        sessionStorageService.isDogOnboardingPending(for: userSeq)
     }
 
     private var cartStorageKey: String {
-        if let currentUserSeq {
-            return SessionStorage.cartKey(for: currentUserSeq)
-        }
-        return SessionStorage.guestCartKey
+        sessionStorageService.cartKey(for: currentUserSeq)
     }
 
     private var favoritesStorageKey: String {
-        if let currentUserSeq {
-            return SessionStorage.favoritesKey(for: currentUserSeq)
-        }
-        return SessionStorage.guestFavoritesKey
+        sessionStorageService.favoritesKey(for: currentUserSeq)
     }
 
     private var readNotificationsStorageKey: String {
-        if let currentUserSeq {
-            return SessionStorage.readNotificationsKey(for: currentUserSeq)
-        }
-        return SessionStorage.guestReadNotificationsKey
-    }
-
-    private func notificationKey(for notification: AppNotificationItem) -> String {
-        "\(notification.category)|\(notification.title)|\(notification.detail)"
-    }
-
-    private func readNotificationKeys() -> Set<String> {
-        Set(UserDefaults.standard.stringArray(forKey: readNotificationsStorageKey) ?? [])
+        sessionStorageService.readNotificationsKey(for: currentUserSeq)
     }
 
     private func saveReadNotificationKey(for notification: AppNotificationItem) {
-        var keys = readNotificationKeys()
-        keys.insert(notificationKey(for: notification))
-        UserDefaults.standard.set(Array(keys), forKey: readNotificationsStorageKey)
+        notificationReadStateService.saveReadNotification(notification, storageKey: readNotificationsStorageKey)
     }
 
     private func applyReadState(to fetchedNotifications: [AppNotificationItem]) -> [AppNotificationItem] {
-        let readKeys = readNotificationKeys()
-        return fetchedNotifications.map { notification in
-            var updated = notification
-            if readKeys.contains(notificationKey(for: notification)) {
-                updated.isNew = false
-            }
-            return updated
-        }
+        notificationReadStateService.applyReadState(to: fetchedNotifications, storageKey: readNotificationsStorageKey)
     }
 
     private func saveCartToLocalStorage() {
-        let productSeqs = cartProductIDs.compactMap { productID in
-            products.first(where: { $0.id == productID })?.dbSeq
-        }
-        UserDefaults.standard.set(productSeqs, forKey: cartStorageKey)
+        productStorageService.saveProductIDs(cartProductIDs, products: products, forKey: cartStorageKey)
     }
 
     private func saveFavoritesToLocalStorage() {
-        let productSeqs = favoriteProductIDs.compactMap { productID in
-            products.first(where: { $0.id == productID })?.dbSeq
-        }
-        UserDefaults.standard.set(productSeqs, forKey: favoritesStorageKey)
+        productStorageService.saveFavoriteProductIDs(favoriteProductIDs, products: products, forKey: favoritesStorageKey)
     }
 
     private func restoreCartFromLocalStorage() {
-        let savedSeqs = UserDefaults.standard.array(forKey: cartStorageKey) as? [Int] ?? []
-        guard !savedSeqs.isEmpty, !products.isEmpty else {
-            cartProductIDs = []
-            return
-        }
-
-        let productsBySeq = products.reduce(into: [Int: Product]()) { result, product in
-            if let dbSeq = product.dbSeq {
-                result[dbSeq] = product
-            }
-        }
-        cartProductIDs = savedSeqs.compactMap { productsBySeq[$0]?.id }
+        cartProductIDs = productStorageService.restoreProductIDs(products: products, forKey: cartStorageKey)
     }
 
     private func restoreFavoritesFromLocalStorage() {
-        let savedSeqs = UserDefaults.standard.array(forKey: favoritesStorageKey) as? [Int] ?? []
-        guard !savedSeqs.isEmpty, !products.isEmpty else {
-            favoriteProductIDs = []
-            return
-        }
-
-        let productsBySeq = products.reduce(into: [Int: Product]()) { result, product in
-            if let dbSeq = product.dbSeq {
-                result[dbSeq] = product
-            }
-        }
-        favoriteProductIDs = Set(savedSeqs.compactMap { productsBySeq[$0]?.id })
-    }
-
-    private func quickPinHash(for pin: String) -> String {
-        let data = Data(pin.utf8)
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
+        favoriteProductIDs = productStorageService.restoreFavoriteProductIDs(products: products, forKey: favoritesStorageKey)
     }
 
     private func saveQuickPinState(pin: String, pinHash: String) {
@@ -1819,30 +1649,11 @@ final class AppState: ObservableObject {
     }
 
     private func isValidPassword(_ text: String) -> Bool {
-        guard text.count >= 8 else { return false }
-        let hasLetter = text.range(of: "[A-Za-z]", options: .regularExpression) != nil
-        return hasLetter
+        validationService.isValidPassword(text)
     }
 
     private func isValidEmail(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        let pattern = #"^[A-Z0-9a-z._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,64}$"#
-        return NSPredicate(format: "SELF MATCHES %@", pattern).evaluate(with: trimmed)
+        validationService.isValidEmail(text)
     }
 
-    private func evaluateBiometric(context: LAContext) async throws -> Bool {
-        try await withCheckedThrowingContinuation { continuation in
-            context.evaluatePolicy(
-                .deviceOwnerAuthenticationWithBiometrics,
-                localizedReason: "빠른 로그인을 위해 생체인증을 사용합니다."
-            ) { success, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(returning: success)
-                }
-            }
-        }
-    }
 }

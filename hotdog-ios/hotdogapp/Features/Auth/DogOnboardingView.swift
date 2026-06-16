@@ -15,14 +15,12 @@ struct DogOnboardingView: View {
     @State private var pickedImage: UIImage?
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showCamera = false
-    @State private var isAnalyzingImage = false
 
     @State private var localErrorMessage: String?
 
     private let keyOrange = Color(red: 0.95, green: 0.55, blue: 0.26)
     private let deepOrange = Color(red: 0.88, green: 0.42, blue: 0.18)
     private let inkBrown = Color(red: 0.25, green: 0.13, blue: 0.07)
-    private let apiClient = HotdogAPIClient()
     private var activePalette: AppPalette {
         selectedTheme.palette
     }
@@ -83,7 +81,6 @@ struct DogOnboardingView: View {
             CameraImagePicker { image in
                 let preparedImage = image.normalizedForAnalysis()
                 pickedImage = preparedImage
-                analyzeImage(preparedImage)
             }
         }
     }
@@ -136,21 +133,6 @@ struct DogOnboardingView: View {
                     .frame(height: 260)
                 }
 
-                if isAnalyzingImage {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(.black.opacity(0.30))
-                    HStack(spacing: 10) {
-                        ProgressView()
-                            .tint(.white)
-                        Text("사진 분석 중")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(.black.opacity(0.42), in: Capsule())
-                    .padding(16)
-                }
             }
             .frame(height: 260)
 
@@ -193,11 +175,11 @@ struct DogOnboardingView: View {
 
     private var analysisSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("분석 결과")
+            sectionTitle("반려견 정보")
 
             VStack(spacing: 10) {
                 HStack(spacing: 12) {
-                    Image(systemName: "sparkles")
+                    Image(systemName: "pawprint.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(keyOrange)
                         .frame(width: 34, height: 34)
@@ -394,7 +376,7 @@ struct DogOnboardingView: View {
     }
 
     private func breedDescription(for breed: String) -> String {
-        breed == "기타" ? "직접 선택" : "분석 결과를 확인하세요"
+        breed == "기타" ? "직접 선택" : "선택한 견종"
     }
 
     private func themeButton(_ theme: DogColorTheme) -> some View {
@@ -449,7 +431,6 @@ struct DogOnboardingView: View {
 
     private func loadPhoto(from item: PhotosPickerItem) async {
         await MainActor.run {
-            isAnalyzingImage = true
             localErrorMessage = nil
         }
 
@@ -457,7 +438,6 @@ struct DogOnboardingView: View {
             guard let data = try await item.loadTransferable(type: Data.self),
                   let rawImage = UIImage(data: data) else {
                 await MainActor.run {
-                    isAnalyzingImage = false
                     localErrorMessage = "사진을 불러오지 못했습니다."
                 }
                 return
@@ -467,50 +447,9 @@ struct DogOnboardingView: View {
             await MainActor.run {
                 pickedImage = preparedImage
             }
-            await analyzeImage(preparedImage)
         } catch {
             await MainActor.run {
-                isAnalyzingImage = false
                 localErrorMessage = "사진을 불러오지 못했습니다. 다시 선택해주세요."
-            }
-        }
-    }
-
-    private func analyzeImage(_ image: UIImage) {
-        Task {
-            await analyzeImage(image)
-        }
-    }
-
-    private func analyzeImage(_ image: UIImage) async {
-        await MainActor.run {
-            isAnalyzingImage = true
-            localErrorMessage = nil
-        }
-
-        guard let imageData = image.jpegData(compressionQuality: 0.86) else {
-            await MainActor.run {
-                detectedBreed = "기타"
-                isAnalyzingImage = false
-                localErrorMessage = "사진을 분석 가능한 형식으로 변환하지 못했습니다."
-            }
-            return
-        }
-
-        do {
-            let analysis = try await apiClient.analyzeDogImage(imageData: imageData)
-            let breed = analysis.resolvedBreed
-
-            await MainActor.run {
-                detectedBreed = supportedBreeds.contains(breed) ? breed : "기타"
-                selectedTheme = analysis.resolvedTheme
-                isAnalyzingImage = false
-            }
-        } catch {
-            await MainActor.run {
-                detectedBreed = "기타"
-                isAnalyzingImage = false
-                localErrorMessage = "강아지 분석 봇과 연결하지 못했습니다. API 서버 상태를 확인해주세요."
             }
         }
     }

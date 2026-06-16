@@ -614,16 +614,26 @@ SELECT
     b.buy_price,
     b.product_seq,
     b.user_seq,
-    b.event_seq,
+    NULL AS event_seq,
     p.product_qty AS current_stock,
     p.product_price,
-    p.product_sub_category_seq,
+    sc.product_sub_category_seq,
     sc.product_sub_category_name
 FROM buy b
 JOIN product p
     ON b.product_seq = p.product_seq
-LEFT JOIN product_sub_category sc
-    ON p.product_sub_category_seq = sc.product_sub_category_seq
+LEFT JOIN (
+    SELECT
+        product_seq,
+        MIN(product_sub_category_seq) AS product_sub_category_seq,
+        GROUP_CONCAT(
+            DISTINCT product_sub_category_name
+            ORDER BY product_sub_category_seq
+            SEPARATOR ', '
+        ) AS product_sub_category_name
+    FROM product_sub_category
+    GROUP BY product_seq
+) sc ON sc.product_seq = p.product_seq
 WHERE b.buy_date IS NOT NULL
   AND b.buy_qty IS NOT NULL
   AND b.product_seq IS NOT NULL
@@ -669,10 +679,20 @@ SELECT
     p.product_seq,
     p.product_qty AS current_stock,
     p.product_price,
-    p.product_sub_category_seq,
+    sc.product_sub_category_seq,
     sc.product_sub_category_name
 FROM product p
-LEFT JOIN product_sub_category sc
-    ON p.product_sub_category_seq = sc.product_sub_category_seq
-WHERE p.product_sub_category_seq IS NOT NULL
+LEFT JOIN (
+    SELECT
+        product_seq,
+        MIN(product_sub_category_seq) AS product_sub_category_seq,
+        GROUP_CONCAT(
+            DISTINCT product_sub_category_name
+            ORDER BY product_sub_category_seq
+            SEPARATOR ', '
+        ) AS product_sub_category_name
+    FROM product_sub_category
+    GROUP BY product_seq
+) sc ON sc.product_seq = p.product_seq
+WHERE sc.product_sub_category_seq IS NOT NULL
 """

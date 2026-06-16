@@ -16,7 +16,7 @@ async def get_products() -> List[Dict[str, Any]]:
             p.product_qty,
             p.product_price,
             p.product_category_seq,
-            p.product_sub_category_seq,
+            psc.product_sub_category_seq,
             pc.product_category_name AS raw_category_name,
             psc.product_sub_category_name AS raw_sub_category_name,
             psc.product_sub_category_name,
@@ -31,7 +31,18 @@ async def get_products() -> List[Dict[str, Any]]:
             END AS product_category_name
         FROM product p
         LEFT JOIN product_category pc ON pc.product_category_seq = p.product_category_seq
-        LEFT JOIN product_sub_category psc ON psc.product_sub_category_seq = p.product_sub_category_seq
+        LEFT JOIN (
+            SELECT
+                product_seq,
+                MIN(product_sub_category_seq) AS product_sub_category_seq,
+                GROUP_CONCAT(
+                    DISTINCT product_sub_category_name
+                    ORDER BY product_sub_category_seq
+                    SEPARATOR ', '
+                ) AS product_sub_category_name
+            FROM product_sub_category
+            GROUP BY product_seq
+        ) psc ON psc.product_seq = p.product_seq
         ORDER BY
             CASE WHEN COALESCE(p.product_qty, 0) <= 0 THEN 1 ELSE 0 END ASC,
             p.product_seq DESC
