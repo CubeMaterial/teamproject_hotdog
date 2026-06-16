@@ -25,7 +25,7 @@ class InventoryFilterBar extends StatelessWidget {
       onChanged: onSearchChanged,
     );
     final categoryFilter = SizedBox(
-      width: 180,
+      width: 320,
       child: DropdownButtonFormField<String>(
         initialValue: categories.contains(selectedCategory)
             ? selectedCategory
@@ -35,16 +35,19 @@ class InventoryFilterBar extends StatelessWidget {
           labelText: '카테고리',
           border: OutlineInputBorder(),
           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      
         ),
         items: [
           for (final category in categories)
-            DropdownMenuItem(value: category, child: Text(category)),
+            DropdownMenuItem(value: category, child: Text(category))
         ],
         onChanged: (value) {
           if (value != null) {
             onCategoryChanged(value);
           }
         },
+        dropdownColor: Color(0xFFF7F8FA),
+        
       ),
     );
 
