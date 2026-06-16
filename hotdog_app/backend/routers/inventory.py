@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from database import fetch_one_by_id, fetch_query, get_connection, sanitize_row
+from database import fetch_one_by_id, fetch_query, get_connection
 from ml.inventory_forecast import append_inventory_forecasts
 
 router = APIRouter()
@@ -65,8 +65,17 @@ def get_inventory_histories(limit: int = Query(default=100, ge=1, le=500)):
                 o.order_date AS happenedAt
             FROM orders o
             JOIN product p ON p.product_seq = o.product_seq
-            LEFT JOIN product_sub_category psc
-                ON psc.product_sub_category_seq = p.product_sub_category_seq
+            LEFT JOIN (
+                SELECT
+                    product_seq,
+                    GROUP_CONCAT(
+                        DISTINCT product_sub_category_name
+                        ORDER BY product_sub_category_seq
+                        SEPARATOR ', '
+                    ) AS product_sub_category_name
+                FROM product_sub_category
+                GROUP BY product_seq
+            ) psc ON psc.product_seq = p.product_seq
 
             UNION ALL
 
@@ -81,8 +90,17 @@ def get_inventory_histories(limit: int = Query(default=100, ge=1, le=500)):
                 r.receive_date AS happenedAt
             FROM receive r
             JOIN product p ON p.product_seq = r.product_seq
-            LEFT JOIN product_sub_category psc
-                ON psc.product_sub_category_seq = p.product_sub_category_seq
+            LEFT JOIN (
+                SELECT
+                    product_seq,
+                    GROUP_CONCAT(
+                        DISTINCT product_sub_category_name
+                        ORDER BY product_sub_category_seq
+                        SEPARATOR ', '
+                    ) AS product_sub_category_name
+                FROM product_sub_category
+                GROUP BY product_seq
+            ) psc ON psc.product_seq = p.product_seq
         ) histories
         ORDER BY happenedAt DESC
         LIMIT %s
@@ -118,9 +136,9 @@ def create_inventory_item(request: ProductCreateRequest):
                     """,
                     (category,),
                 )
-                category_row = cursor.fetchone()
+                category_exists = cursor.fetchone()
 
-                if category_row is None:
+                if category_exists is None:
                     raise HTTPException(status_code=400, detail="존재하지 않는 카테고리입니다.")
 
                 maker_seq = None
@@ -145,20 +163,28 @@ def create_inventory_item(request: ProductCreateRequest):
                         product_qty,
                         product_price,
                         maker_seq,
-                        product_category_seq,
-                        product_sub_category_seq
+                        product_category_seq
                     )
-                    VALUES (%s, %s, %s, %s, 1, %s)
+                    VALUES (%s, %s, %s, %s, 1)
                     """,
                     (
                         name,
                         request.stock,
                         request.price,
                         maker_seq,
-                        category_row["product_sub_category_seq"],
                     ),
                 )
                 product_seq = cursor.lastrowid
+                cursor.execute(
+                    """
+                    INSERT INTO product_sub_category (
+                        product_seq,
+                        product_sub_category_name
+                    )
+                    VALUES (%s, %s)
+                    """,
+                    (product_seq, category),
+                )
                 connection.commit()
 
         return fetch_one_by_id("product", "product_seq", product_seq)
@@ -177,7 +203,7 @@ def get_inventory_items(limit: int = Query(default=1000, ge=1, le=5000)):
             CAST(p.product_seq AS CHAR) AS productSeq,
             CONCAT('PRD-', p.product_seq) AS inventorySerialNumber,
             p.product_name AS name,
-            p.product_sub_category_seq AS productSubCategorySeq,
+            psc.product_sub_category_seq AS productSubCategorySeq,
             COALESCE(psc.product_sub_category_name, '미분류') AS category,
             COALESCE(p.product_qty, 0) AS stock,
             10 AS safeStock,
@@ -188,8 +214,18 @@ def get_inventory_items(limit: int = Query(default=1000, ge=1, le=5000)):
                 ELSE '보통'
             END AS status
         FROM product p
-        LEFT JOIN product_sub_category psc
-            ON psc.product_sub_category_seq = p.product_sub_category_seq
+        LEFT JOIN (
+            SELECT
+                product_seq,
+                MIN(product_sub_category_seq) AS product_sub_category_seq,
+                GROUP_CONCAT(
+                    DISTINCT product_sub_category_name
+                    ORDER BY product_sub_category_seq
+                    SEPARATOR ', '
+                ) AS product_sub_category_name
+            FROM product_sub_category
+            GROUP BY product_seq
+        ) psc ON psc.product_seq = p.product_seq
         ORDER BY p.product_seq ASC
         LIMIT %s
         """,

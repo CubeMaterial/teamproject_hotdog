@@ -28,7 +28,7 @@ struct HomeView: View {
         ("목줄", "link"),
         ("하네스", "figure.walk"),
         ("후기", "text.bubble.fill"),
-        ("AI분석", "camera.viewfinder"),
+        ("반려견", "pawprint.circle.fill"),
         ("병원", "cross.case.fill"),
         ("산책", "figure.walk")
     ]
@@ -612,21 +612,21 @@ struct HomeView: View {
 
     private func aiShortcutSection(palette: AppPalette) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(title: "AI 견종 분석", subtitle: "사진 한 장으로 견종과 맞춤 상품을 추천해요", palette: palette)
+            sectionHeader(title: "반려견 프로필", subtitle: "사진과 기본 정보를 등록하고 맞춤 상품을 추천받아요", palette: palette)
 
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("사진 업로드")
+                    Text("프로필 등록")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
-                    Text("견종 분석 바로 시작하기")
+                    Text("반려견 정보 입력하기")
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.88))
                 }
 
                 Spacer()
 
-                Image(systemName: "camera.fill")
+                Image(systemName: "pawprint.fill")
                     .font(.system(size: 22))
                     .foregroundStyle(.white)
             }
@@ -666,7 +666,7 @@ struct HomeView: View {
         case "사료", "간식", "장난감", "의류", "목줄", "하네스":
             appState.setProductCategory(title)
             appState.selectedTab = .products
-        case "AI분석":
+        case "반려견":
             appState.beginDogOnboarding()
         case "산책":
             appState.selectedTab = .walk

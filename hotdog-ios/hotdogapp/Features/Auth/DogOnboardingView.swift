@@ -142,7 +142,7 @@ struct DogOnboardingView: View {
                     HStack(spacing: 10) {
                         ProgressView()
                             .tint(.white)
-                        Text("사진 분석 중")
+                        Text("견종/색상 분석 중")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.white)
                     }
@@ -193,11 +193,11 @@ struct DogOnboardingView: View {
 
     private var analysisSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("분석 결과")
+            sectionTitle("반려견 정보")
 
             VStack(spacing: 10) {
                 HStack(spacing: 12) {
-                    Image(systemName: "sparkles")
+                    Image(systemName: "pawprint.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(keyOrange)
                         .frame(width: 34, height: 34)
@@ -394,7 +394,7 @@ struct DogOnboardingView: View {
     }
 
     private func breedDescription(for breed: String) -> String {
-        breed == "기타" ? "직접 선택" : "분석 결과를 확인하세요"
+        breed == "기타" ? "직접 선택" : "사진 분석 결과"
     }
 
     private func themeButton(_ theme: DogColorTheme) -> some View {
@@ -449,7 +449,6 @@ struct DogOnboardingView: View {
 
     private func loadPhoto(from item: PhotosPickerItem) async {
         await MainActor.run {
-            isAnalyzingImage = true
             localErrorMessage = nil
         }
 
@@ -457,7 +456,6 @@ struct DogOnboardingView: View {
             guard let data = try await item.loadTransferable(type: Data.self),
                   let rawImage = UIImage(data: data) else {
                 await MainActor.run {
-                    isAnalyzingImage = false
                     localErrorMessage = "사진을 불러오지 못했습니다."
                 }
                 return
@@ -470,7 +468,6 @@ struct DogOnboardingView: View {
             await analyzeImage(preparedImage)
         } catch {
             await MainActor.run {
-                isAnalyzingImage = false
                 localErrorMessage = "사진을 불러오지 못했습니다. 다시 선택해주세요."
             }
         }
@@ -510,7 +507,7 @@ struct DogOnboardingView: View {
             await MainActor.run {
                 detectedBreed = "기타"
                 isAnalyzingImage = false
-                localErrorMessage = "강아지 분석 봇과 연결하지 못했습니다. API 서버 상태를 확인해주세요."
+                localErrorMessage = "사진 분석 서버에 연결하지 못했습니다. 서버 URL과 API key를 확인해주세요."
             }
         }
     }

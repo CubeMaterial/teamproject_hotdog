@@ -497,7 +497,17 @@ def search_products(
         FROM product p
         LEFT JOIN maker m ON m.maker_seq = p.maker_seq
         LEFT JOIN product_category pc ON pc.product_category_seq = p.product_category_seq
-        LEFT JOIN product_sub_category psc ON psc.product_sub_category_seq = p.product_sub_category_seq
+        LEFT JOIN (
+            SELECT
+                product_seq,
+                GROUP_CONCAT(
+                    DISTINCT product_sub_category_name
+                    ORDER BY product_sub_category_seq
+                    SEPARATOR ', '
+                ) AS product_sub_category_name
+            FROM product_sub_category
+            GROUP BY product_seq
+        ) psc ON psc.product_seq = p.product_seq
         LEFT JOIN dog_size ds ON ds.dog_size_seq = p.dog_size_seq
         LEFT JOIN dog_age da ON da.dog_age_seq = p.dog_age_seq
         {where_sql}
