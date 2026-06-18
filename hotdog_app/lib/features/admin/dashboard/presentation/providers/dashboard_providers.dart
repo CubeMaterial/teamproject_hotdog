@@ -13,6 +13,7 @@ import '../../data/datasources/sales_order_remote_datasource.dart';
 import '../../data/repositories/dashboard_repository_impl.dart';
 import '../../domain/repositories/dashboard_repository.dart';
 import '../../domain/usecases/create_inventory_item_usecase.dart';
+import '../../domain/usecases/create_purchase_order_usecase.dart';
 import '../../domain/usecases/delete_comments_usecase.dart';
 import '../../domain/usecases/get_inventory_categories_usecase.dart';
 import '../../domain/usecases/create_staff_usecase.dart';
@@ -98,6 +99,7 @@ final purchaseOrderViewModelProvider =
     ChangeNotifierProvider<PurchaseOrderViewModel>((ref) {
       return PurchaseOrderViewModel(
         GetPurchaseOrdersUseCase(ref.watch(dashboardRepositoryProvider)),
+        CreatePurchaseOrderUseCase(ref.watch(dashboardRepositoryProvider)),
       );
     });
 

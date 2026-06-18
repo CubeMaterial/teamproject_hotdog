@@ -39,9 +39,7 @@ class SalesOrderTable extends StatelessWidget {
               alignment: Alignment.center,
               child: SalesOrderStatusBadge(label: order.status),
             ),
-            Text(
-              '${order.orderedAt.month}/${order.orderedAt.day} ${order.orderedAt.hour}:${order.orderedAt.minute.toString().padLeft(2, '0')}',
-            ),
+            Text(_formatDate(order.orderedAt)),
           ],
       ],
     );
@@ -67,7 +65,7 @@ class SalesOrderTable extends StatelessWidget {
             DashboardTextDetailItem(label: '상태', value: order.status),
             DashboardTextDetailItem(
               label: '주문일',
-              value: _formatDateTime(order.orderedAt),
+              value: _formatDate(order.orderedAt),
             ),
           ],
         );
@@ -86,12 +84,10 @@ class SalesOrderTable extends StatelessWidget {
     return '${trimmedText.substring(0, maxLength)}...';
   }
 
-  String _formatDateTime(DateTime date) {
+  String _formatDate(DateTime date) {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-    return '${date.year}-$month-$day $hour:$minute';
+    return '${date.year}-$month-$day';
   }
 
   String _formatNumber(int value) {

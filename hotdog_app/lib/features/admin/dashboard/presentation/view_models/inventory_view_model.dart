@@ -54,30 +54,6 @@ class InventoryViewModel extends ChangeNotifier {
     }).toList();
   }
 
-  List<CategoryInventoryForecast> get categoryForecasts {
-    final groupedItems = <String, List<InventoryItem>>{};
-    for (final item in items) {
-      groupedItems.putIfAbsent(item.category, () => []).add(item);
-    }
-
-    final forecasts = [
-      for (final entry in groupedItems.entries)
-        CategoryInventoryForecast(
-          category: entry.key,
-          predictedStockAfter7d: _sumForecast(
-            entry.value,
-            (item) => item.predictedStockAfter7d,
-          ),
-          predictedStockAfter30d: _sumForecast(
-            entry.value,
-            (item) => item.predictedStockAfter30d,
-          ),
-        ),
-    ]..sort((a, b) => a.category.compareTo(b.category));
-
-    return forecasts;
-  }
-
   Future<void> ensureLoaded() async {
     if (hasLoaded || isLoading) {
       return;
@@ -161,36 +137,4 @@ class InventoryViewModel extends ChangeNotifier {
     hasLoaded = false;
     await load();
   }
-
-  double? _sumForecast(
-    List<InventoryItem> items,
-    double? Function(InventoryItem item) valueOf,
-  ) {
-    var hasValue = false;
-    var total = 0.0;
-
-    for (final item in items) {
-      final value = valueOf(item);
-      if (value == null) {
-        continue;
-      }
-
-      hasValue = true;
-      total += value;
-    }
-
-    return hasValue ? total : null;
-  }
-}
-
-class CategoryInventoryForecast {
-  const CategoryInventoryForecast({
-    required this.category,
-    required this.predictedStockAfter7d,
-    required this.predictedStockAfter30d,
-  });
-
-  final String category;
-  final double? predictedStockAfter7d;
-  final double? predictedStockAfter30d;
 }

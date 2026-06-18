@@ -48,11 +48,11 @@ class _RefundDetailDialogState extends State<RefundDetailDialog> {
         DashboardTextDetailItem(label: '주문상태', value: refund.orderStatus),
         DashboardTextDetailItem(
           label: '구매일',
-          value: _formatDateTime(refund.orderedAt),
+          value: _formatDate(refund.orderedAt),
         ),
         DashboardTextDetailItem(
           label: '요청일',
-          value: _formatDateTime(refund.requestedAt),
+          value: _formatDate(refund.requestedAt),
         ),
         DashboardTextDetailItem(
           label: '환불 상세내용',
@@ -65,7 +65,7 @@ class _RefundDetailDialogState extends State<RefundDetailDialog> {
         OutlinedButton(
           onPressed: _isUpdating ? null : () => _updateStatus('canceled'),
           style: _refundActionButtonStyle,
-          child: const Text('환불 취소 하기'),
+          child: const Text('환불 취소하기'),
         ),
         const SizedBox(width: 10),
         OutlinedButton(
@@ -138,16 +138,14 @@ class _RefundDetailDialogState extends State<RefundDetailDialog> {
     }
   }
 
-  String _formatDateTime(DateTime date) {
+  String _formatDate(DateTime date) {
     if (date.millisecondsSinceEpoch == 0) {
       return '-';
     }
 
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-    return '${date.year}-$month-$day $hour:$minute';
+    return '${date.year}-$month-$day';
   }
 
   String _formatNumber(int value) {

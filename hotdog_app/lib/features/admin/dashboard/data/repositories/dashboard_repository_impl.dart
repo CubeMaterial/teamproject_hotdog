@@ -92,6 +92,21 @@ class DashboardRepositoryImpl implements DashboardRepository {
       purchaseOrderRemoteDataSource.getPurchaseOrders();
 
   @override
+  Future<PurchaseOrder> createPurchaseOrder({
+    required String vendor,
+    required String itemName,
+    required int quantity,
+    required DateTime createdAt,
+  }) {
+    return purchaseOrderRemoteDataSource.createPurchaseOrder(
+      vendor: vendor,
+      itemName: itemName,
+      quantity: quantity,
+      createdAt: createdAt,
+    );
+  }
+
+  @override
   Future<List<Staff>> getStaffs() => staffRemoteDataSource.getStaffs();
 
   @override

@@ -11,7 +11,6 @@ import '../widgets/dashboard_sub_tab_page.dart';
 import 'tabs/comment/comment_manage_tab.dart';
 import 'tabs/staff/staff_manage_tab.dart';
 import 'tabs/inventory/item_manage_tab.dart';
-import 'tabs/inventory/category_inventory_forecast_tab.dart';
 import 'tabs/inventory/inventory_tab.dart';
 import 'tabs/inventory/stock_history_tab.dart';
 import 'tabs/member/member_manage_tab.dart';
@@ -125,10 +124,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           DashboardSubTab(
             label: '품목관리',
             child: ItemManageTab(viewModel: inventoryViewModel),
-          ),
-          DashboardSubTab(
-            label: '카테고리별 재고 예측',
-            child: CategoryInventoryForecastTab(viewModel: inventoryViewModel),
           ),
         ],
       ),

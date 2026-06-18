@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:hotdog_app/core/theme/app_colors.dart';
+
 import '../../../../domain/entities/inventory.dart';
 import '../../../view_models/inventory_view_model.dart';
 import '../../../widgets/dashboard_data_table.dart';
@@ -21,17 +23,44 @@ class ItemManageTab extends StatelessWidget {
           title: '품목 관리',
           subtitle: '판매 품목과 카테고리 정보를 관리합니다.',
           actions: [
-            FilledButton.icon(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => ItemFormDialog(
-                  categories: viewModel.categories,
-                  makers: viewModel.makers,
-                  onSubmit: viewModel.createItem,
+            SizedBox(
+              // width: 120,
+              height: 45,
+              child: FilledButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => ItemFormDialog(
+                    categories: viewModel.categories,
+                    makers: viewModel.makers,
+                    onSubmit: viewModel.createItem,
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.deepOrange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  minimumSize: const Size(0, 45),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add, size: 22, color: Colors.white),
+                    SizedBox(width: 2),
+                    Text(
+                      '품목 등록',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              icon: const Icon(Icons.add),
-              label: const Text('품목 등록'),
             ),
           ],
         ),

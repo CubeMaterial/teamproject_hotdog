@@ -2,6 +2,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, HTTPException
 
+from refund_state import RefundState
 from user_common import fetch_all, get_pool, parse_delivery_address
 
 router = APIRouter(tags=["user-purchases"])
@@ -220,18 +221,26 @@ async def update_purchase_status(
                             UPDATE refund
                             SET user_seq = %s,
                                 refund_date = NOW(),
-                                refund_state = 'requested'
+                                refund_state = %s
                             WHERE buy_seq = %s
                             """,
-                            (user_seq, buy_seq),
+                            (
+                                user_seq,
+                                RefundState.REQUESTED.value,
+                                buy_seq,
+                            ),
                         )
                     else:
                         await cur.execute(
                             """
                             INSERT INTO refund (buy_seq, user_seq, refund_date, refund_state)
-                            VALUES (%s, %s, NOW(), 'requested')
+                            VALUES (%s, %s, NOW(), %s)
                             """,
-                            (buy_seq, user_seq),
+                            (
+                                buy_seq,
+                                user_seq,
+                                RefundState.REQUESTED.value,
+                            ),
                         )
             await conn.commit()
         except HTTPException:

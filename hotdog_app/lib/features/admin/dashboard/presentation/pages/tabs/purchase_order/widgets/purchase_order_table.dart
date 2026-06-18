@@ -14,7 +14,6 @@ class PurchaseOrderTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return DashboardDataTable(
       columns: const ['거래처', '품목', '수량', '상태', '발주일'],
-      numericColumnIndexes: const {2},
       rows: [
         for (final order in orders)
           [
@@ -30,10 +29,20 @@ class PurchaseOrderTable extends StatelessWidget {
               ),
               child: Text(_truncate(order.itemName)),
             ),
-            DashboardNumberText(order.quantity),
-            PurchaseOrderStatusBadge(label: order.status),
-            Text(
-              '${order.createdAt.year}-${order.createdAt.month}-${order.createdAt.day}',
+            Align(
+              alignment: Alignment.center,
+              child: Text('${order.quantity}', textAlign: TextAlign.center),
+            ),
+            Align(
+              alignment: Alignment.center,
+              child: PurchaseOrderStatusBadge(label: order.status),
+            ),
+            Align(
+              alignment: Alignment.center,
+              child: Text(
+                _formatDate(order.createdAt),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
       ],

@@ -42,7 +42,7 @@ class RefundTable extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: Text(
-                '${refund.requestedAt.year}-${refund.requestedAt.month}-${refund.requestedAt.day}',
+                _formatDate(refund.requestedAt),
                 textAlign: TextAlign.right,
               ),
             ),
@@ -75,5 +75,11 @@ class RefundTable extends StatelessWidget {
     }
 
     return '${trimmedText.substring(0, maxLength)}...';
+  }
+
+  String _formatDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
   }
 }

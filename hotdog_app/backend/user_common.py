@@ -10,6 +10,7 @@ import aiomysql
 from fastapi import HTTPException
 
 from config import settings
+from refund_state import RefundState
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOADS_DIR = BASE_DIR / "uploads"
@@ -276,7 +277,7 @@ async def ensure_refund_table() -> None:
                     buy_seq INT NOT NULL,
                     user_seq INT NOT NULL,
                     refund_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    refund_state VARCHAR(20) NOT NULL DEFAULT 'requested',
+                    refund_state TINYINT NOT NULL DEFAULT 0,
                     refund_details TEXT NULL,
                     UNIQUE KEY uq_refund_buy_seq (buy_seq)
                 )
@@ -287,7 +288,7 @@ async def ensure_refund_table() -> None:
                 "buy_seq": "ALTER TABLE refund ADD COLUMN buy_seq INT NOT NULL AFTER refund_seq",
                 "user_seq": "ALTER TABLE refund ADD COLUMN user_seq INT NOT NULL AFTER buy_seq",
                 "refund_date": "ALTER TABLE refund ADD COLUMN refund_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER user_seq",
-                "refund_state": "ALTER TABLE refund ADD COLUMN refund_state VARCHAR(20) NOT NULL DEFAULT 'requested' AFTER refund_date",
+                "refund_state": "ALTER TABLE refund ADD COLUMN refund_state TINYINT NOT NULL DEFAULT 0 AFTER refund_date",
                 "refund_details": "ALTER TABLE refund ADD COLUMN refund_details TEXT NULL AFTER refund_state",
             }
             for column_name, alter_sql in column_definitions.items():
@@ -323,6 +324,67 @@ async def ensure_refund_table() -> None:
                     """
                 )
                 await cur.execute("ALTER TABLE refund DROP COLUMN refund_status")
+                changed = True
+
+            await cur.execute(
+                """
+                SELECT DATA_TYPE
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'refund'
+                  AND COLUMN_NAME = 'refund_state'
+                """
+            )
+            refund_state_column = await cur.fetchone()
+            if (
+                refund_state_column
+                and refund_state_column.get("DATA_TYPE") != "tinyint"
+            ):
+                await cur.execute(
+                    """
+                    UPDATE refund
+                    SET refund_state = CASE
+                        WHEN LOWER(TRIM(CAST(refund_state AS CHAR))) IN
+                            ('pending', 'hold', 'on_hold')
+                            THEN %s
+                        WHEN LOWER(TRIM(CAST(refund_state AS CHAR))) IN
+                            ('1', 'approved', 'complete', 'completed', 'refunded')
+                            THEN %s
+                        WHEN LOWER(TRIM(CAST(refund_state AS CHAR))) IN
+                            ('2', '3', 'rejected', 'denied', 'canceled', 'cancelled')
+                            THEN %s
+                        ELSE %s
+                    END
+                    """,
+                    (
+                        RefundState.ON_HOLD.value,
+                        RefundState.CONFIRMED.value,
+                        RefundState.CANCELED.value,
+                        RefundState.REQUESTED.value,
+                    ),
+                )
+                await cur.execute(
+                    """
+                    ALTER TABLE refund
+                    MODIFY COLUMN refund_state TINYINT NOT NULL DEFAULT 0
+                    """
+                )
+                changed = True
+
+            await cur.execute(
+                """
+                UPDATE refund r
+                INNER JOIN buy b ON b.buy_seq = r.buy_seq
+                SET r.refund_state = %s
+                WHERE b.buy_status = 'refunded'
+                  AND r.refund_state <> %s
+                """,
+                (
+                    RefundState.CONFIRMED.value,
+                    RefundState.CONFIRMED.value,
+                ),
+            )
+            if cur.rowcount > 0:
                 changed = True
 
         if changed:

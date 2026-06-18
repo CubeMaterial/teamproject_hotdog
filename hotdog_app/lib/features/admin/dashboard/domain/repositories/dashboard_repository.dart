@@ -27,6 +27,12 @@ abstract class DashboardRepository {
   });
   Future<List<SalesOrder>> getSalesOrders();
   Future<List<PurchaseOrder>> getPurchaseOrders();
+  Future<PurchaseOrder> createPurchaseOrder({
+    required String vendor,
+    required String itemName,
+    required int quantity,
+    required DateTime createdAt,
+  });
   Future<List<Staff>> getStaffs();
   Future<StaffCreationResult> createStaff({
     required String staffName,

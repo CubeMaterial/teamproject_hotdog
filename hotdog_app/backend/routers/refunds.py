@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from database import fetch_query, get_connection
+from refund_state import REFUND_STATE_LABELS, RefundState
 
 router = APIRouter()
 
 
 @router.get("/")
 def get_refunds(limit: int = Query(default=100, ge=1, le=500)):
-    return fetch_query(
+    refunds = fetch_query(
         """
         SELECT
             CAST(r.refund_seq AS CHAR) AS id,
@@ -23,12 +24,6 @@ def get_refunds(limit: int = Query(default=100, ge=1, le=500)):
             b.buy_status AS orderStatus,
             r.refund_state AS rawStatus,
             COALESCE(r.refund_details, '') AS refundDetails,
-            CASE
-                WHEN r.refund_state IN ('1', 'approved', 'complete', 'completed', 'refunded') THEN '환불완료'
-                WHEN r.refund_state IN ('2', 'rejected', 'denied', 'canceled', 'cancelled') THEN '환불취소'
-                WHEN r.refund_state IN ('pending', 'hold') THEN '환불보류'
-                ELSE '환불신청'
-            END AS status,
             r.refund_date AS requestedAt
         FROM refund r
         LEFT JOIN buy b ON b.buy_seq = r.buy_seq
@@ -40,18 +35,27 @@ def get_refunds(limit: int = Query(default=100, ge=1, le=500)):
         (limit,),
     )
 
+    for refund in refunds:
+        try:
+            state = RefundState(int(refund["rawStatus"]))
+        except (KeyError, TypeError, ValueError):
+            state = RefundState.REQUESTED
+        refund["status"] = REFUND_STATE_LABELS[state]
+
+    return refunds
+
 
 @router.patch("/{refund_seq}/status")
 def update_refund_status(refund_seq: int, payload: dict = Body(...)):
     action = str(payload.get("action") or "").strip().lower()
     state_by_action = {
-        "approve": "approved",
-        "approved": "approved",
-        "process": "approved",
-        "hold": "pending",
-        "pending": "pending",
-        "cancel": "canceled",
-        "canceled": "canceled",
+        "approve": RefundState.CONFIRMED,
+        "approved": RefundState.CONFIRMED,
+        "process": RefundState.CONFIRMED,
+        "hold": RefundState.ON_HOLD,
+        "pending": RefundState.ON_HOLD,
+        "cancel": RefundState.CANCELED,
+        "canceled": RefundState.CANCELED,
     }
     next_state = state_by_action.get(action)
 
@@ -59,9 +63,9 @@ def update_refund_status(refund_seq: int, payload: dict = Body(...)):
         raise HTTPException(status_code=400, detail="지원하지 않는 환불 처리입니다.")
 
     buy_status_by_state = {
-        "approved": "refunded",
-        "pending": "refund_requested",
-        "canceled": "confirmed",
+        RefundState.CONFIRMED: "refunded",
+        RefundState.ON_HOLD: "refund_requested",
+        RefundState.CANCELED: "confirmed",
     }
 
     try:
@@ -88,7 +92,7 @@ def update_refund_status(refund_seq: int, payload: dict = Body(...)):
                         refund_date = NOW()
                     WHERE refund_seq = %s
                     """,
-                    (next_state, refund_seq),
+                    (next_state.value, refund_seq),
                 )
                 cursor.execute(
                     """
@@ -108,5 +112,5 @@ def update_refund_status(refund_seq: int, payload: dict = Body(...)):
     return {
         "message": "환불 상태가 변경되었습니다.",
         "refund_seq": refund_seq,
-        "refund_state": next_state,
+        "refund_state": next_state.value,
     }

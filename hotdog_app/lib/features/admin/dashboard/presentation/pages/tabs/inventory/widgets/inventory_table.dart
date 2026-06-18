@@ -37,94 +37,107 @@ class InventoryTable extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final tableWidth = constraints.maxWidth < 960
-              ? 960.0
+          final tableWidth = constraints.maxWidth < 1200
+              ? 1200.0
               : constraints.maxWidth;
 
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: tableWidth,
-              child: Table(
-                columnWidths: const {
-                  0: FixedColumnWidth(48),
-                  1: FixedColumnWidth(64),
-                  2: FlexColumnWidth(),
-                  3: FixedColumnWidth(120),
-                  4: FixedColumnWidth(96),
-                  5: FixedColumnWidth(112),
-                  6: FixedColumnWidth(120),
-                  7: FixedColumnWidth(120),
-                  8: FixedColumnWidth(112),
-                },
-                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                children: [
-                  TableRow(
-                    children: [
-                      _HeaderCheckboxCell(
-                        value: partiallySelected ? null : allSelected,
-                        onChanged: items.isEmpty
-                            ? null
-                            : (value) => onAllSelectionChanged(value ?? false),
-                      ),
-                      const _HeaderCell('번호'),
-                      const _HeaderCell('상품'),
-                      const _HeaderCell('카테고리'),
-                      const _HeaderCell('재고'),
-                      const _HeaderCell('상태'),
-                      const _HeaderCell('7일 예측'),
-                      const _HeaderCell('30일 예측'),
-                      const _HeaderCell('위험도'),
-                    ],
-                  ),
-                  for (final item in items)
+          return Scrollbar(
+            interactive: true,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: tableWidth,
+                child: Table(
+                  columnWidths: const {
+                    0: FixedColumnWidth(48),
+                    1: FixedColumnWidth(64),
+                    2: FixedColumnWidth(360),
+                    3: FixedColumnWidth(160),
+                    4: FixedColumnWidth(96),
+                    5: FixedColumnWidth(112),
+                    6: FixedColumnWidth(120),
+                    7: FixedColumnWidth(120),
+                    8: FixedColumnWidth(120),
+                  },
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: [
                     TableRow(
-                      decoration: const BoxDecoration(
-                        border: Border(
-                          top: BorderSide(color: AppColors.border),
-                        ),
-                      ),
                       children: [
-                        _BodyCell(
-                          child: Checkbox(
-                            value: selectedItemIds.contains(item.id),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                            onChanged: (value) {
-                              onSelectionChanged(item.id, value ?? false);
-                            },
-                          ),
+                        _HeaderCheckboxCell(
+                          value: partiallySelected ? null : allSelected,
+                          onChanged: items.isEmpty
+                              ? null
+                              : (value) =>
+                                    onAllSelectionChanged(value ?? false),
                         ),
-                        _BodyCell(child: Text(item.id)),
-                        _BodyCell(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            item.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        _BodyCell(child: Text(item.category)),
-                        _BodyCell(child: Text('${item.stock}')),
-                        _BodyCell(child: StockStatusBadge(label: item.status)),
-                        _BodyCell(
-                          child: _ForecastValueText(
-                            value: item.predictedStockAfter7d,
-                          ),
-                        ),
-                        _BodyCell(
-                          child: _ForecastValueText(
-                            value: item.predictedStockAfter30d,
-                          ),
-                        ),
-                        _BodyCell(
-                          child: ForecastRiskBadge(
-                            label: item.forecastRiskLabel,
-                          ),
-                        ),
+                        const _HeaderCell('번호'),
+                        const _HeaderCell('상품'),
+                        const _HeaderCell('카테고리'),
+                        const _HeaderCell('재고'),
+                        const _HeaderCell('상태'),
+                        const _HeaderCell('7일 예측'),
+                        const _HeaderCell('30일 예측'),
+                        const _HeaderCell('위험도'),
                       ],
                     ),
-                ],
+                    for (final item in items)
+                      TableRow(
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            top: BorderSide(color: AppColors.border),
+                          ),
+                        ),
+                        children: [
+                          _BodyCell(
+                            child: Checkbox(
+                              value: selectedItemIds.contains(item.id),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                              onChanged: (value) {
+                                onSelectionChanged(item.id, value ?? false);
+                              },
+                            ),
+                          ),
+                          _BodyCell(child: Text(item.id)),
+                          _BodyCell(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              item.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          _BodyCell(
+                            child: Text(
+                              item.category,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          _BodyCell(child: Text('${item.stock}')),
+                          _BodyCell(
+                            child: StockStatusBadge(label: item.status),
+                          ),
+                          _BodyCell(
+                            child: _ForecastValueText(
+                              value: item.predictedStockAfter7d,
+                            ),
+                          ),
+                          _BodyCell(
+                            child: _ForecastValueText(
+                              value: item.predictedStockAfter30d,
+                            ),
+                          ),
+                          _BodyCell(
+                            child: ForecastRiskBadge(
+                              label: item.forecastRiskLabel,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ),
           );
