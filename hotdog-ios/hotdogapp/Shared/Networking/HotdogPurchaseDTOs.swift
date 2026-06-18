@@ -91,6 +91,12 @@ struct CreatePurchasesResponseDTO: Decodable {
 
 struct PurchaseStatusUpdateRequest: Encodable {
     let action: String
+    let refundReason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case action
+        case refundReason = "refund_reason"
+    }
 }
 
 struct AddressDTO: Decodable {

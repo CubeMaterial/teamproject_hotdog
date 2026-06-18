@@ -68,8 +68,13 @@ extension HotdogAPIClient {
         }
     }
 
-    func updatePurchaseStatus(userSeq: Int, buySeq: Int, action: String) async throws {
-        let request = PurchaseStatusUpdateRequest(action: action)
+    func updatePurchaseStatus(
+        userSeq: Int,
+        buySeq: Int,
+        action: String,
+        refundReason: String? = nil
+    ) async throws {
+        let request = PurchaseStatusUpdateRequest(action: action, refundReason: refundReason)
         _ = try await send(path: "/users/\(userSeq)/purchases/\(buySeq)/status", method: "PATCH", body: request)
     }
 }

@@ -645,14 +645,31 @@ final class AppState: ObservableObject {
     }
 
     @discardableResult
-    func updatePurchaseStatus(_ purchase: PurchaseHistoryItem, action: String) async -> Bool {
+    func updatePurchaseStatus(
+        _ purchase: PurchaseHistoryItem,
+        action: String,
+        refundReason: String? = nil
+    ) async -> Bool {
         guard let currentUserSeq, let buySeq = purchase.dbSeq else {
             apiErrorMessage = "주문 상태를 변경할 수 없습니다."
             return false
         }
 
+        let trimmedRefundReason = refundReason?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if action == "refund", trimmedRefundReason?.isEmpty != false {
+            let message = "환불 사유를 입력해주세요."
+            apiErrorMessage = message
+            showSnackbar(message)
+            return false
+        }
+
         do {
-            try await apiClient.updatePurchaseStatus(userSeq: currentUserSeq, buySeq: buySeq, action: action)
+            try await apiClient.updatePurchaseStatus(
+                userSeq: currentUserSeq,
+                buySeq: buySeq,
+                action: action,
+                refundReason: trimmedRefundReason
+            )
             applyPurchaseStatusLocally(buySeq: buySeq, action: action)
             let message: String
             switch action {

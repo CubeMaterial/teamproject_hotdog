@@ -47,20 +47,26 @@ struct MyPageView: View {
             } message: {
                 Text("\(dogPendingDeletion?.name ?? "선택한 강아지") 정보가 목록에서 삭제됩니다.")
             }
-            .alert("환불 처리할까요?", isPresented: refundConfirmationBinding) {
-                Button("아니요", role: .cancel) {
-                    refundPendingItem = nil
-                }
-                Button("예", role: .destructive) {
-                    if let refundPendingItem {
+            .sheet(item: $refundPendingItem) { item in
+                RefundReasonSheet(
+                    item: item,
+                    palette: palette,
+                    onSubmit: { reason in
                         Task {
-                            await appState.updatePurchaseStatus(refundPendingItem, action: "refund")
-                            self.refundPendingItem = nil
+                            let didUpdate = await appState.updatePurchaseStatus(
+                                item,
+                                action: "refund",
+                                refundReason: reason
+                            )
+                            if didUpdate {
+                                refundPendingItem = nil
+                            }
                         }
+                    },
+                    onCancel: {
+                        refundPendingItem = nil
                     }
-                }
-            } message: {
-                Text("\(refundPendingItem?.product?.name ?? "선택한 상품") 주문을 환불 처리합니다.")
+                )
             }
             .navigationDestination(isPresented: dogEditNavigationBinding) {
                 if let dog = dogBeingEdited {
@@ -96,17 +102,6 @@ struct MyPageView: View {
             set: { isPresented in
                 if !isPresented {
                     dogPendingDeletion = nil
-                }
-            }
-        )
-    }
-
-    private var refundConfirmationBinding: Binding<Bool> {
-        Binding(
-            get: { refundPendingItem != nil },
-            set: { isPresented in
-                if !isPresented {
-                    refundPendingItem = nil
                 }
             }
         )
@@ -491,6 +486,106 @@ struct MyPageView: View {
     }
 }
 
+private struct RefundReasonSheet: View {
+    let item: PurchaseHistoryItem
+    let palette: AppPalette
+    let onSubmit: (String) -> Void
+    let onCancel: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var reason = ""
+
+    private var trimmedReason: String {
+        reason.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSubmit: Bool {
+        !trimmedReason.isEmpty && trimmedReason.count <= 500
+    }
+
+    private var productName: String {
+        item.product?.name ?? "상품 번호 \(item.productSeq ?? 0)"
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(productName)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(palette.textPrimary)
+                    Text("\(item.quantity)개 · \(item.totalPrice.formatted())원")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(palette.primary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("환불 사유")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(palette.textPrimary)
+
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: $reason)
+                            .font(.system(size: 15))
+                            .foregroundStyle(palette.textPrimary)
+                            .scrollContentBackground(.hidden)
+                            .padding(10)
+                            .frame(minHeight: 140)
+                            .background(
+                                palette.background,
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            )
+
+                        if reason.isEmpty {
+                            Text("예: 상품 파손, 오배송, 단순 변심 등")
+                                .font(.system(size: 15))
+                                .foregroundStyle(palette.textSecondary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 18)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                }
+
+                HStack(alignment: .top, spacing: 8) {
+                    Text(trimmedReason.count > 500 ? "환불 사유는 500자 이하로 입력해주세요." : "사유를 입력해야 환불 요청이 가능합니다.")
+                        .lineLimit(2)
+                    Spacer()
+                    Text("\(trimmedReason.count)/500")
+                        .monospacedDigit()
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(canSubmit ? palette.textSecondary : .red)
+
+                Spacer()
+            }
+            .padding(18)
+            .background(palette.cardBackground.ignoresSafeArea())
+            .navigationTitle("환불 요청")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("취소") {
+                        onCancel()
+                        dismiss()
+                    }
+                    .foregroundStyle(palette.textSecondary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("요청") {
+                        if canSubmit {
+                            onSubmit(trimmedReason)
+                        }
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(canSubmit ? .red : palette.textSecondary)
+                    .disabled(!canSubmit)
+                }
+            }
+        }
+    }
+}
+
 struct FavoriteListView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -616,32 +711,27 @@ struct PurchaseHistoryView: View {
         .refreshable {
             await appState.loadPurchaseHistory()
         }
-        .alert("환불 처리할까요?", isPresented: refundConfirmationBinding) {
-            Button("아니요", role: .cancel) {
-                refundPendingItem = nil
-            }
-            Button("예", role: .destructive) {
-                if let refundPendingItem {
+        .sheet(item: $refundPendingItem) { item in
+            RefundReasonSheet(
+                item: item,
+                palette: palette,
+                onSubmit: { reason in
                     Task {
-                        await appState.updatePurchaseStatus(refundPendingItem, action: "refund")
-                        self.refundPendingItem = nil
+                        let didUpdate = await appState.updatePurchaseStatus(
+                            item,
+                            action: "refund",
+                            refundReason: reason
+                        )
+                        if didUpdate {
+                            refundPendingItem = nil
+                        }
                     }
-                }
-            }
-        } message: {
-            Text("\(refundPendingItem?.product?.name ?? "선택한 상품") 주문을 환불 요청합니다.")
-        }
-    }
-
-    private var refundConfirmationBinding: Binding<Bool> {
-        Binding(
-            get: { refundPendingItem != nil },
-            set: { isPresented in
-                if !isPresented {
+                },
+                onCancel: {
                     refundPendingItem = nil
                 }
-            }
-        )
+            )
+        }
     }
 
     private func purchaseRow(item: PurchaseHistoryItem, palette: AppPalette) -> some View {
