@@ -13,4 +13,14 @@ class RefundRemoteDataSource {
 
     return ModelMapper.mapList(data, RefundModel.fromJson, label: 'refunds');
   }
+
+  Future<void> updateRefundStatus({
+    required String refundId,
+    required String action,
+  }) async {
+    await _apiClient.patchMap(
+      ApiRoutes.refundStatus(refundId),
+      body: {'action': action},
+    );
+  }
 }

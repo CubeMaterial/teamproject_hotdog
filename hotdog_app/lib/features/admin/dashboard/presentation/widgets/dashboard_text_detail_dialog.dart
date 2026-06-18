@@ -6,10 +6,12 @@ class DashboardTextDetailDialog extends StatelessWidget {
     super.key,
     required this.title,
     required this.items,
+    this.actions = const [],
   });
 
   final String title;
   final List<DashboardTextDetailItem> items;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +62,13 @@ class DashboardTextDetailDialog extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: actions,
+                  ),
+                ],
               ],
             ),
           ),

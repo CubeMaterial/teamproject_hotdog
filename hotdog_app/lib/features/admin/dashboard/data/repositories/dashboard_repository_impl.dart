@@ -46,6 +46,17 @@ class DashboardRepositoryImpl implements DashboardRepository {
   Future<List<Refund>> getRefunds() => refundRemoteDataSource.getRefunds();
 
   @override
+  Future<void> updateRefundStatus({
+    required String refundId,
+    required String action,
+  }) {
+    return refundRemoteDataSource.updateRefundStatus(
+      refundId: refundId,
+      action: action,
+    );
+  }
+
+  @override
   Future<List<InventoryItem>> getInventoryItems() =>
       inventoryRemoteDataSource.getInventoryItems();
 

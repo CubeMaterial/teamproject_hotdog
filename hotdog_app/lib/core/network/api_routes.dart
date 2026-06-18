@@ -14,4 +14,7 @@ class ApiRoutes {
   static const refunds = '/admin/refunds/';
   static const comments = '/admin/comments/';
   static const login = '/admin/auth/login';
+
+  static String refundStatus(String refundId) =>
+      '/admin/refunds/$refundId/status';
 }

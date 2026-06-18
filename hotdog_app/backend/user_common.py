@@ -277,6 +277,7 @@ async def ensure_refund_table() -> None:
                     user_seq INT NOT NULL,
                     refund_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     refund_state VARCHAR(20) NOT NULL DEFAULT 'requested',
+                    refund_details TEXT NULL,
                     UNIQUE KEY uq_refund_buy_seq (buy_seq)
                 )
                 """
@@ -287,6 +288,7 @@ async def ensure_refund_table() -> None:
                 "user_seq": "ALTER TABLE refund ADD COLUMN user_seq INT NOT NULL AFTER buy_seq",
                 "refund_date": "ALTER TABLE refund ADD COLUMN refund_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER user_seq",
                 "refund_state": "ALTER TABLE refund ADD COLUMN refund_state VARCHAR(20) NOT NULL DEFAULT 'requested' AFTER refund_date",
+                "refund_details": "ALTER TABLE refund ADD COLUMN refund_details TEXT NULL AFTER refund_state",
             }
             for column_name, alter_sql in column_definitions.items():
                 await cur.execute(

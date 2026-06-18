@@ -29,6 +29,7 @@ import '../../domain/usecases/get_sales_orders_usecase.dart';
 import '../../domain/usecases/get_stock_histories_usecase.dart';
 import '../../domain/usecases/update_staff_password_usecase.dart';
 import '../../domain/usecases/update_staff_phone_usecase.dart';
+import '../../domain/usecases/update_refund_status_usecase.dart';
 import '../../domain/usecases/verify_staff_password_usecase.dart';
 import '../view_models/comment_view_model.dart';
 import '../view_models/dashboard_view_model.dart';
@@ -69,6 +70,7 @@ final dashboardViewModelProvider = ChangeNotifierProvider<DashboardViewModel>((
 final refundViewModelProvider = ChangeNotifierProvider<RefundViewModel>((ref) {
   return RefundViewModel(
     GetRefundsUseCase(ref.watch(dashboardRepositoryProvider)),
+    UpdateRefundStatusUseCase(ref.watch(dashboardRepositoryProvider)),
   );
 });
 

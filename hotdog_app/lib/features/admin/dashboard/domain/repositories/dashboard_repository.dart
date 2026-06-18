@@ -11,6 +11,10 @@ import '../entities/sales_order.dart';
 abstract class DashboardRepository {
   Future<DashboardSummary> getDashboardSummary();
   Future<List<Refund>> getRefunds();
+  Future<void> updateRefundStatus({
+    required String refundId,
+    required String action,
+  });
   Future<List<InventoryItem>> getInventoryItems();
   Future<List<StockHistory>> getStockHistories();
   Future<List<String>> getInventoryMakers();

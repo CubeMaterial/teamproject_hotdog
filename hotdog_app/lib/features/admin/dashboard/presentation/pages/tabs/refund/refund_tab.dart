@@ -25,7 +25,10 @@ class RefundTab extends StatelessWidget {
           items: viewModel.refunds,
           headerBuilder: (pageSizeSelector) =>
               RefundFilterBar(pageSizeSelector: pageSizeSelector),
-          tableBuilder: (refunds) => RefundTable(refunds: refunds),
+          tableBuilder: (refunds) => RefundTable(
+            refunds: refunds,
+            onStatusChanged: viewModel.updateStatus,
+          ),
         ),
       ],
     );
