@@ -56,7 +56,7 @@ struct MyPageView: View {
                             let didUpdate = await appState.updatePurchaseStatus(
                                 item,
                                 action: "refund",
-                                refundReason: reason
+                                refundDetails: reason
                             )
                             if didUpdate {
                                 refundPendingItem = nil
@@ -720,7 +720,7 @@ struct PurchaseHistoryView: View {
                         let didUpdate = await appState.updatePurchaseStatus(
                             item,
                             action: "refund",
-                            refundReason: reason
+                            refundDetails: reason
                         )
                         if didUpdate {
                             refundPendingItem = nil

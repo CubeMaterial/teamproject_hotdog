@@ -312,6 +312,29 @@ async def ensure_refund_table() -> None:
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = DATABASE()
                   AND TABLE_NAME = 'refund'
+                  AND COLUMN_NAME = 'refund_reason'
+                """
+            )
+            has_refund_reason = await cur.fetchone()
+            if has_refund_reason:
+                await cur.execute(
+                    """
+                    UPDATE refund
+                    SET refund_details = COALESCE(NULLIF(refund_details, ''), refund_reason)
+                    WHERE refund_reason IS NOT NULL
+                      AND refund_reason <> ''
+                      AND (refund_details IS NULL OR refund_details = '')
+                    """
+                )
+                if cur.rowcount > 0:
+                    changed = True
+
+            await cur.execute(
+                """
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'refund'
                   AND COLUMN_NAME = 'refund_status'
                 """
             )

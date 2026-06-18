@@ -154,6 +154,15 @@ async def update_purchase_status(
             status_code=400, detail="지원하지 않는 주문 상태 변경입니다."
         )
 
+    refund_details = str(
+        payload.get("refund_details")
+        or payload.get("refund_reason")
+        or payload.get("reason")
+        or ""
+    ).strip()
+    if action == "refund" and not refund_details:
+        raise HTTPException(status_code=400, detail="환불 사유를 입력해주세요.")
+
     db = await get_pool()
     async with db.acquire() as conn:
         try:
@@ -221,25 +230,28 @@ async def update_purchase_status(
                             UPDATE refund
                             SET user_seq = %s,
                                 refund_date = NOW(),
-                                refund_state = %s
+                                refund_state = %s,
+                                refund_details = %s
                             WHERE buy_seq = %s
                             """,
                             (
                                 user_seq,
                                 RefundState.REQUESTED.value,
+                                refund_details,
                                 buy_seq,
                             ),
                         )
                     else:
                         await cur.execute(
                             """
-                            INSERT INTO refund (buy_seq, user_seq, refund_date, refund_state)
-                            VALUES (%s, %s, NOW(), %s)
+                            INSERT INTO refund (buy_seq, user_seq, refund_date, refund_state, refund_details)
+                            VALUES (%s, %s, NOW(), %s, %s)
                             """,
                             (
                                 buy_seq,
                                 user_seq,
                                 RefundState.REQUESTED.value,
+                                refund_details,
                             ),
                         )
             await conn.commit()

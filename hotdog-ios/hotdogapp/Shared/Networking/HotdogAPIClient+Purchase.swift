@@ -72,9 +72,9 @@ extension HotdogAPIClient {
         userSeq: Int,
         buySeq: Int,
         action: String,
-        refundReason: String? = nil
+        refundDetails: String? = nil
     ) async throws {
-        let request = PurchaseStatusUpdateRequest(action: action, refundReason: refundReason)
+        let request = PurchaseStatusUpdateRequest(action: action, refundDetails: refundDetails)
         _ = try await send(path: "/users/\(userSeq)/purchases/\(buySeq)/status", method: "PATCH", body: request)
     }
 }
