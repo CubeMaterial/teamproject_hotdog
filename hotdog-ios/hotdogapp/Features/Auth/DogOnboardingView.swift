@@ -28,7 +28,7 @@ struct DogOnboardingView: View {
     }
 
     private var canGoBack: Bool {
-        appState.dogs.contains { $0.dbSeq != nil || $0.breed != "정보 없음" }
+        appState.canCancelDogOnboarding
     }
 
     private let supportedBreeds: [String] = [

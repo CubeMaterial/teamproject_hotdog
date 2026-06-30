@@ -66,6 +66,7 @@ final class AppState: ObservableObject {
     @Published var isLoadingChatbotOptions = false
     @Published var isLoadingRemoteData = false
     @Published var isSavingDogProfile = false
+    @Published private var isDogOnboardingAddFlow = false
     @Published var snackbarMessage: String?
     @Published var snackbarIsError = false
     @Published var apiErrorMessage: String? {
@@ -135,13 +136,19 @@ final class AppState: ObservableObject {
         authStateService.biometricLoginTitle()
     }
 
+    var canCancelDogOnboarding: Bool {
+        isDogOnboardingAddFlow || dogs.contains { $0.dbSeq != nil || $0.breed != "정보 없음" }
+    }
+
     func beginDogOnboarding() {
+        isDogOnboardingAddFlow = true
         needsDogOnboarding = true
     }
 
     func cancelDogOnboardingIfPossible() {
-        guard dogs.contains(where: { $0.dbSeq != nil || $0.breed != "정보 없음" }) else { return }
+        guard canCancelDogOnboarding else { return }
         needsDogOnboarding = false
+        isDogOnboardingAddFlow = false
         dogOnboardingErrorMessage = nil
     }
 
@@ -1325,6 +1332,7 @@ final class AppState: ObservableObject {
             ChatMessage(sender: "HOTDOG", text: "\(dog.name) 프로필 등록이 완료됐어요.")
         ]
         needsDogOnboarding = false
+        isDogOnboardingAddFlow = false
     }
 
     private func refreshUserDogsAfterMutation(userSeq: Int, preferredDog: DogProfile?) async {
